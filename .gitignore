@@ -1,0 +1,38 @@
+# Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+.mvn/timing.properties
+
+# Java
+*.class
+*.jar
+*.war
+hs_err_pid*
+
+# IDE — IntelliJ
+.idea/
+*.iml
+*.iws
+
+# IDE — VS Code / Eclipse
+.vscode/
+.settings/
+.project
+.classpath
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Variáveis de ambiente / segredos (NUNCA commitar)
+.env
+*.env
+application-local.yml
+application-secret.yml
+
+# Ollama / modelos locais (analise-svc)
+models/
+*.gguf

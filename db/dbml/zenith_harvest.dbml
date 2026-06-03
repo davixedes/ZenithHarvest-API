@@ -1,0 +1,633 @@
+// =============================================================================
+// GeoSafra — Modelo de Dados (DBML para dbdiagram.io)
+// Fiel a ModelagemBanco.xlsx + decisoes confirmadas
+// =============================================================================
+//
+// PREMISSAS APLICADAS (normalizacoes sobre a planilha):
+//   1. PK de entidade = uuid | PK de lookup = int
+//   2. FK para lookup = int (a planilha as vezes marcou uuid — normalizado)
+//   3. Code (int, incremento 1) SO nas 11 entidades operacionais:
+//        User, Crop, Farm, Plot, Insurer, Insurance, InsuranceQuote,
+//        Policy, Claim, Payment, PaymentInvoice
+//      -> removido de Credential e AccessLog (a planilha tinha, mas fora da regra)
+//      -> removido de TODAS as lookups
+//   4. SatelliteSource virou LOOKUP PURO (sem Code, sem OperatorId)
+//        -> tabela Operator removida (ficaria orfa); operador vira coluna texto
+//   5. PreventiveAlert.Status (era string) -> FK para nova lookup AlertSituation
+//   6. AlertSeverityId adicionado em PreventiveAlert (planilha tinha AlertSeverity orfa)
+//   7. ClaimSubCategory mantida FLAT (Claim referencia CategoryId e SubCategoryId direto)
+//   8. Typos corrigidos: AuditLog.SystemActor = String | Payment.ConfirmedAt = Timestamp
+//   9. NOT NULL conservador: so o que existe na criacao. Operacionais = nullable.
+//
+//   REVISAR DEPOIS (nao bloqueia):
+//   - Sem relacionamento N:N (edital pede pelo menos 1).
+//   - Claim.CalculatedAmount e Claim.ApprovedAmount estao como timestamp na planilha
+//     (provavel typo — deveriam ser float/number). Mantive como na planilha + nota.
+//   - Tipos monetarios mistos (Float vs Number) preservados da planilha.
+//
+// Cole tudo em https://dbdiagram.io/d
+// =============================================================================
+
+
+// =============================================================================
+// USERS — DOMAIN
+// =============================================================================
+
+Table "User" {
+  "Id"          uuid      [pk]
+  "Cpf"         varchar   [not null, unique]
+  "Name"        varchar   [not null]
+  "LastName"    varchar   [not null]
+  "AddressId"   uuid      [ref: > "Address"."Id"]
+  "Email"       varchar   [not null, unique]
+  "Phone"       varchar   [not null]
+  "Code"        int       [not null, unique, note: 'incremental 1 em 1 — busca no front']
+  "LastLoginAt" timestamp
+  "CreatedAt"   timestamp [not null, default: `now()`]
+  "EditedAt"    timestamp
+  "UpdatedAt"   timestamp
+  "DeletedAt"   timestamp
+}
+
+Table "Credential" {
+  "Id"        uuid      [pk]
+  "UserId"    uuid      [not null, ref: > "User"."Id"]
+  "Password"  varchar   [not null]
+  "Secret"    varchar   [not null]
+  "CreatedAt" timestamp [not null, default: `now()`]
+  "EditedAt"  timestamp
+  "DeletedAt" timestamp
+}
+
+Table "Address" {
+  "Id"         uuid    [pk]
+  "Street"     varchar [not null]
+  "Number"     int     [not null]
+  "Neighboor"  varchar [not null]
+  "City"       varchar [not null]
+  "Complement" varchar
+  "PostalCode" varchar [not null]
+  "UF"         char(2) [not null]
+  "Country"    varchar [not null]
+}
+
+Table "AccessLog" {
+  "Id"                uuid      [pk]
+  "UserId"            uuid      [ref: > "User"."Id"]
+  "AccessLogActionId" int       [not null, ref: > "AccessLogAction"."Id"]
+  "Ip"                varchar
+  "UserAgent"         varchar
+  "Success"           boolean   [not null]
+  "FailureReason"     varchar
+  "CreatedAt"         timestamp [not null, default: `now()`]
+}
+
+Table "AccessLogAction" {
+  "Id"          int       [pk]
+  "Description" varchar   [not null]
+  "Active"      boolean   [not null, default: true]
+  "CreatedAt"   timestamp [not null, default: `now()`]
+  "DeletedAt"   timestamp
+}
+
+
+// =============================================================================
+// FARM — DOMAIN
+// =============================================================================
+
+Table "Crop" {
+  "Id"                     uuid       [pk]
+  "Name"                   varchar    [not null]
+  "ScientificName"         varchar    [not null]
+  "Code"                   int        [not null, unique, note: 'incremental 1 em 1']
+  "AverageCycleDays"       int
+  "ExpectedNdviMin"        decimal(4,3)
+  "ExpectedNdviMax"        decimal(4,3)
+  "AverageValuePerHectare" decimal(15,2)
+  "DroughtVulnerability"   decimal(3,1)
+  "FrostVulnerability"     decimal(3,1)
+  "Status"                 boolean    [not null, default: true]
+  "CreatedAt"              timestamp  [not null, default: `now()`]
+  "EditedAt"               timestamp
+  "DeletedAt"              timestamp
+}
+
+Table "Farm" {
+  "Id"                uuid        [pk]
+  "UserId"            uuid        [not null, ref: > "User"."Id"]
+  "Name"              varchar     [not null]
+  "Code"              int         [not null, unique, note: 'incremental 1 em 1']
+  "CarRegistration"   varchar     [not null]
+  "Nirf"              varchar     [not null]
+  "Latitude"          decimal(10,7) [not null]
+  "Longitude"         decimal(10,7) [not null]
+  "TotalAreaHectares" decimal(10,2) [not null]
+  "State"             char(2)     [not null]
+  "BiomeId"           int         [ref: > "Biome"."Id"]
+  "PropertyType"      varchar
+  "PolygonWkt"        clob
+  "Active"            boolean     [not null, default: true]
+  "CreatedAt"         timestamp   [not null, default: `now()`]
+  "EditedAt"          timestamp
+  "DeletedAt"         timestamp
+}
+
+Table "Plot" {
+  "Id"                   uuid        [pk]
+  "FarmId"               uuid        [not null, ref: > "Farm"."Id"]
+  "CropId"               uuid        [ref: > "Crop"."Id"]
+  "PlotSituationId"      int         [not null, ref: > "PlotSituation"."Id"]
+  "ProductionSystemId"   int         [ref: > "ProductionSystem"."Id"]
+  "Code"                 int         [not null, unique, note: 'incremental 1 em 1']
+  "Identifier"           varchar     [not null]
+  "AreaHectares"         decimal(10,2) [not null]
+  "PlantingDate"         date
+  "EstimatedHarvestDate" date
+  "CycleDays"            int
+  "SeedVariety"          varchar
+  "PolygonWkt"           clob
+  "CreatedAt"            timestamp   [not null, default: `now()`]
+  "EditedAt"             timestamp
+  "DeletedAt"            timestamp
+
+  indexes {
+    ("FarmId", "Identifier") [unique]
+  }
+}
+
+Table "Biome" {
+  "Id"                 int       [pk]
+  "Description"        varchar   [not null]
+  "RegionalRiskFactor" float     [not null, default: 1.0]
+  "Active"             boolean   [not null, default: true]
+  "CreatedAt"          timestamp [not null, default: `now()`]
+  "EditedAt"           timestamp
+  "DeletedAt"          timestamp
+}
+
+Table "ProductionSystem" {
+  "Id"              int       [pk]
+  "Description"     varchar   [not null]
+  "PremiumDiscount" float     [not null, default: 0]
+  "Active"          boolean   [not null, default: true]
+  "CreatedAt"       timestamp [not null, default: `now()`]
+  "EditedAt"        timestamp
+  "DeletedAt"       timestamp
+}
+
+Table "PlotSituation" {
+  "Id"          int       [pk]
+  "Description" varchar   [not null]
+  "IsTerminal"  boolean   [not null, default: false]
+  "Active"      boolean   [not null, default: true]
+  "CreatedAt"   timestamp [not null, default: `now()`]
+  "EditedAt"    timestamp
+  "DeletedAt"   timestamp
+}
+
+
+// =============================================================================
+// INSURANCE CATALOG — DOMAIN
+// =============================================================================
+
+Table "Insurer" {
+  "Id"                 uuid      [pk]
+  "CorporateName"      varchar   [not null]
+  "TradeName"          varchar
+  "Cnpj"               varchar   [not null, unique]
+  "Code"               int       [not null, unique, note: 'incremental 1 em 1']
+  "SusepCode"          varchar   [not null, unique]
+  "CommercialEmail"    varchar
+  "Phone"              varchar
+  "LogoUrl"            varchar
+  "AdminFeePct"        float     [not null, default: 5.0]
+  "TakeRatePct"        float     [not null, default: 8.0]
+  "Active"             boolean   [not null, default: true]
+  "InsurerSituationId" int       [not null, ref: > "InsurerSituation"."Id"]
+  "AccreditedAt"       date      [not null, default: `now()`]
+  "CreatedAt"          timestamp [not null, default: `now()`]
+  "EditedAt"           timestamp
+  "DeletedAt"          timestamp
+}
+
+Table "Insurance" {
+  "Id"                    uuid        [pk]
+  "InsurerId"             uuid        [not null, ref: > "Insurer"."Id"]
+  "Name"                  varchar     [not null]
+  "Description"           varchar     [not null]
+  "Code"                  int         [not null, unique, note: 'incremental 1 em 1']
+  "DeductiblePct"         decimal(5,2) [not null, default: 10.00]
+  "GraceDays"             int          [not null, default: 7]
+  "MaxCoveragePerHectare" decimal(15,2)
+  "BaseRatePct"           decimal(5,3)
+  "AvailableStates"       varchar
+  "InsuranceSituationId"  int         [not null, ref: > "InsuranceSituation"."Id"]
+  "Active"                boolean     [not null, default: true]
+  "CreatedAt"             timestamp   [not null, default: `now()`]
+  "EditedAt"              timestamp
+  "DeletedAt"             timestamp
+}
+
+Table "InsuranceQuote" {
+  "Id"               uuid        [pk]
+  "UserId"           uuid        [not null, ref: > "User"."Id"]
+  "PlotId"           uuid        [not null, ref: > "Plot"."Id"]
+  "InsuranceId"      uuid        [not null, ref: > "Insurance"."Id"]
+  "QuoteSituationId" int         [not null, ref: > "InsuranceQuoteSituation"."Id"]
+  "Code"             int         [not null, unique, note: 'incremental 1 em 1']
+  "InsuredAmount"    decimal(15,2)
+  "TotalPremium"     decimal(15,2)
+  "MonthlyPremium"   decimal(15,2)
+  "RegionalFactor"   decimal(5,3) [default: 1.000]
+  "HistoryFactor"    decimal(5,3) [default: 1.000]
+  "ValidUntil"       timestamp
+  "AcceptedAt"       timestamp
+  "CreatedAt"        timestamp   [not null, default: `now()`]
+  "EditedAt"         timestamp
+  "DeletedAt"        timestamp
+}
+
+Table "InsuranceQuoteSituation" {
+  "Id"          int       [pk]
+  "Description" varchar   [not null]
+  "IsTerminal"  boolean   [not null, default: false]
+  "Active"      boolean   [not null, default: true]
+  "CreatedAt"   timestamp [not null, default: `now()`]
+}
+
+Table "InsurerSituation" {
+  "Id"                int       [pk]
+  "Description"       varchar   [not null]
+  "AllowsNewPolicies" boolean   [not null, default: true]
+  "Active"            boolean   [not null, default: true]
+  "CreatedAt"         timestamp [not null, default: `now()`]
+  "EditedAt"          timestamp
+  "DeletedAt"         timestamp
+}
+
+Table "InsuranceSituation" {
+  "Id"              int       [pk]
+  "Description"     varchar   [not null]
+  "AllowsNewQuotes" boolean   [not null, default: true]
+  "Active"          boolean   [not null, default: true]
+  "CreatedAt"       timestamp [not null, default: `now()`]
+  "EditedAt"        timestamp
+  "DeletedAt"       timestamp
+}
+
+
+// =============================================================================
+// OPERATION — DOMAIN
+// =============================================================================
+
+Table "Policy" {
+  "Id"                uuid      [pk]
+  "PolicyNumber"      varchar   [not null, unique]
+  "InsuranceQuoteId"  uuid      [ref: > "InsuranceQuote"."Id"]
+  "PlotId"            uuid      [not null, ref: > "Plot"."Id"]
+  "InsurerId"         uuid      [not null, ref: > "Insurer"."Id"]
+  "InsuranceId"       uuid      [not null, ref: > "Insurance"."Id"]
+  "PolicySituationId" int       [not null, ref: > "PolicySituation"."Id"]
+  "Code"              int       [not null, unique, note: 'incremental 1 em 1']
+  "InsuredAmount"     float     [not null]
+  "TotalPremium"      float
+  "MonthlyPremium"    float
+  "DeductiblePct"     float
+  "MaxCoverage"       float
+  "AccumulatedPaid"   float     [not null, default: 0]
+  "StartDate"         date      [not null]
+  "EndDate"           date      [not null]
+  "ContractedAt"      timestamp [not null, default: `now()`]
+  "CancelledAt"       timestamp
+  "CreatedAt"         timestamp [not null, default: `now()`]
+  "EditedAt"          timestamp
+  "DeletedAt"         timestamp
+}
+
+Table "PolicyItem" {
+  "Id"                uuid    [pk]
+  "PolicyId"          uuid    [not null, ref: > "Policy"."Id"]
+  "ClaimEventTypeId"  int     [not null, ref: > "ClaimEventType"."Id"]
+  "CoveragePct"       float   [not null, default: 100]
+  "MaxCoverageAmount" float
+  "Notes"             varchar
+
+  indexes {
+    ("PolicyId", "ClaimEventTypeId") [unique]
+  }
+}
+
+Table "Claim" {
+  "Id"                  uuid      [pk]
+  "ClaimNumber"         varchar   [not null, unique]
+  "PolicyId"            uuid      [not null, ref: > "Policy"."Id"]
+  "ClaimSituationId"    int       [not null, ref: > "ClaimSituation"."Id"]
+  "CategoryId"          int       [not null, ref: > "ClaimCategory"."Id"]
+  "Code"                int       [not null, unique, note: 'incremental 1 em 1']
+  "SubCategoryId"       int       [not null, ref: > "ClaimSubCategory"."Id"]
+  "Description"         varchar
+  "PhotoUrl"            varchar
+  "OpeningGpsLat"       varchar
+  "OpeningGpsLng"       varchar
+  "NdviBefore"          float
+  "NdviAfter"           float
+  "TotalLossPct"        float
+  "TotalAffectedAreaHa" float
+  "CalculatedAmount"    float     [note: 'planilha marcou timestamp — assumido float']
+  "ApprovedAmount"      float     [note: 'planilha marcou timestamp — assumido float']
+  "MlConfidenceScore"   float
+  "FraudFlag"           boolean   [not null, default: false]
+  "RejectionReasonId"   int       [ref: > "RejectionReason"."Id"]
+  "AnalystId"           uuid
+  "ApprovedAt"          timestamp
+  "CreatedAt"           timestamp [not null, default: `now()`]
+  "EditedAt"            timestamp
+  "PaidAt"              timestamp
+  "DeletedAt"           timestamp
+}
+
+Table "ClaimItem" {
+  "Id"               uuid    [pk]
+  "ClaimId"          uuid    [not null, ref: > "Claim"."Id"]
+  "ClaimEventTypeId" int     [not null, ref: > "ClaimEventType"."Id"]
+  "AffectedAreaHa"   float
+  "LossPct"          float
+  "NdviBefore"       float
+  "NdviAfter"        float
+  "ItemAmount"       float
+  "Description"      varchar
+}
+
+Table "SatelliteAnalysis" {
+  "Id"                uuid      [pk]
+  "ClaimId"           uuid      [ref: > "Claim"."Id"]
+  "PlotId"            uuid      [not null, ref: > "Plot"."Id"]
+  "SatelliteSourceId" int       [not null, ref: > "SatelliteSource"."Id"]
+  "SatelliteClassId"  int       [ref: > "SatelliteClass"."Id"]
+  "ImageDate"         date      [not null]
+  "SceneId"           varchar
+  "ImageUrl"          varchar
+  "MeanNdvi"          float
+  "MeanEvi"           float
+  "CloudCoveragePct"  float
+  "AffectedAreaM2"    float
+  "MlConfidence"      float
+  "ProcessedAt"       timestamp
+  "CreatedAt"         timestamp [not null, default: `now()`]
+  "EditedAt"          timestamp
+  "DeletedAt"         timestamp
+}
+
+Table "PreventiveAlert" {
+  "Id"               uuid      [pk]
+  "PlotId"           uuid      [not null, ref: > "Plot"."Id"]
+  "AlertTypeId"      int       [not null, ref: > "AlertType"."Id"]
+  "AlertSeverityId"  int       [not null, ref: > "AlertSeverity"."Id"]
+  "AlertSituationId" int       [not null, ref: > "AlertSituation"."Id"]
+  "Message"          varchar   [not null]
+  "ObservedNdvi"     float
+  "ExpectedNdvi"     float
+  "DropPct"          float
+  "IssuedAt"         timestamp [not null, default: `now()`]
+  "ViewedAt"         timestamp
+  "CreatedAt"        timestamp [not null, default: `now()`]
+}
+
+Table "PolicySituation" {
+  "Id"          int       [pk]
+  "Description" varchar   [not null]
+  "AllowsClaim" boolean   [not null, default: false]
+  "IsTerminal"  boolean   [not null, default: false]
+  "Active"      boolean   [not null, default: true]
+  "CreatedAt"   timestamp [not null, default: `now()`]
+  "EditedAt"    timestamp
+  "DeletedAt"   timestamp
+}
+
+Table "ClaimSituation" {
+  "Id"          int       [pk]
+  "Description" varchar   [not null]
+  "AllowsClaim" boolean   [not null, default: false]
+  "IsTerminal"  boolean   [not null, default: false]
+  "Active"      boolean   [not null, default: true]
+  "CreatedAt"   timestamp [not null, default: `now()`]
+  "DeletedAt"   timestamp
+}
+
+Table "ClaimEventType" {
+  "Id"            int       [pk]
+  "Description"   varchar   [not null]
+  "RequiresPhoto" boolean   [not null, default: false]
+  "Active"        boolean   [not null, default: true]
+  "CreatedAt"     timestamp [not null, default: `now()`]
+  "DeletedAt"     timestamp
+}
+
+Table "ClaimCategory" {
+  "Id"          int       [pk]
+  "Description" varchar   [not null]
+  "Active"      boolean   [not null, default: true]
+  "CreatedAt"   timestamp [not null, default: `now()`]
+  "DeletedAt"   timestamp
+}
+
+Table "ClaimSubCategory" {
+  "Id"          int       [pk]
+  "Description" varchar   [not null]
+  "Active"      boolean   [not null, default: true]
+  "CreatedAt"   timestamp [not null, default: `now()`]
+  "DeletedAt"   timestamp
+}
+
+Table "SatelliteSource" {
+  "Id"                   int       [pk]
+  "Description"          varchar   [not null]
+  "Operator"             varchar
+  "Resolution"           varchar
+  "RevisitFrequencyDays" int
+  "Active"               boolean   [not null, default: true]
+  "CreatedAt"            timestamp [not null, default: `now()`]
+  "DeletedAt"            timestamp
+}
+
+Table "SatelliteClass" {
+  "Id"          int       [pk]
+  "Description" varchar   [not null]
+  "Severity"    int       [not null, default: 0]
+  "Active"      boolean   [not null, default: true]
+  "CreatedAt"   timestamp [not null, default: `now()`]
+}
+
+Table "AlertType" {
+  "Id"          int       [pk]
+  "Description" varchar   [not null]
+  "Active"      boolean   [not null, default: true]
+  "CreatedAt"   timestamp [not null, default: `now()`]
+}
+
+Table "AlertSeverity" {
+  "Id"          int       [pk]
+  "Description" varchar   [not null]
+  "Level"       int       [not null]
+  "ColorHex"    varchar
+  "PushNotify"  boolean   [not null, default: false]
+  "SmsNotify"   boolean   [not null, default: false]
+  "CreatedAt"   timestamp [not null, default: `now()`]
+}
+
+Table "AlertSituation" {
+  "Id"          int       [pk]
+  "Description" varchar   [not null, note: 'ISSUED / VIEWED / IGNORED / ACTION_TAKEN']
+  "IsTerminal"  boolean   [not null, default: false]
+  "Active"      boolean   [not null, default: true]
+  "CreatedAt"   timestamp [not null, default: `now()`]
+  "DeletedAt"   timestamp
+}
+
+Table "RejectionReason" {
+  "Id"          int       [pk]
+  "Description" varchar   [not null]
+  "Active"      boolean   [not null, default: true]
+  "CreatedAt"   timestamp [not null, default: `now()`]
+  "EditedAt"    timestamp
+  "DeletedAt"   timestamp
+}
+
+
+// =============================================================================
+// FINANCIAL — DOMAIN
+// =============================================================================
+
+Table "Payment" {
+  "Id"                 uuid      [pk]
+  "PaymentTypeId"      int       [not null, ref: > "PaymentType"."Id"]
+  "PaymentSituationId" int       [not null, ref: > "PaymentSituation"."Id"]
+  "ClaimId"            uuid      [ref: > "Claim"."Id"]
+  "PolicyId"           uuid      [ref: > "Policy"."Id"]
+  "PaymentInvoiceId"   uuid      [ref: > "PaymentInvoice"."Id"]
+  "Code"               int       [not null, unique, note: 'incremental 1 em 1']
+  "Amount"             float     [not null]
+  "PixKey"             varchar
+  "SentAt"             timestamp
+  "ConfirmedAt"        timestamp
+  "PspTransactionId"   uuid
+  "Attempts"           int       [not null, default: 0]
+  "FailureReason"      varchar
+  "CreatedAt"          timestamp [not null, default: `now()`]
+  "EditedAt"           timestamp
+  "DeletedAt"          timestamp
+  Note: 'XOR Claim/Policy garantido por CHECK no DDL Oracle.'
+}
+
+Table "PaymentInvoice" {
+  "Id"            uuid      [pk]
+  "InvoiceNumber" varchar   [not null, unique]
+  "UserId"        uuid      [not null, ref: > "User"."Id"]
+  "InsurerId"     uuid      [ref: > "Insurer"."Id"]
+  "Code"          int       [not null, unique, note: 'incremental 1 em 1']
+  "TotalAmount"   float
+  "DueDate"       date      [not null]
+  "IssuedAt"      timestamp [not null, default: `now()`]
+  "PaidAt"        timestamp
+  "Active"        boolean   [not null, default: true]
+}
+
+Table "PaymentType" {
+  "Id"          int       [pk]
+  "Description" varchar   [not null]
+  "Direction"   varchar   [not null, note: 'IN / OUT']
+  "Active"      boolean   [not null, default: true]
+  "CreatedAt"   timestamp [not null, default: `now()`]
+}
+
+Table "PaymentSituation" {
+  "Id"          int       [pk]
+  "Description" varchar   [not null]
+  "IsTerminal"  boolean   [not null, default: false]
+  "IsSuccess"   boolean   [not null, default: false]
+  "Active"      boolean   [not null, default: true]
+  "CreatedAt"   timestamp [not null, default: `now()`]
+}
+
+
+// =============================================================================
+// AUDIT
+// =============================================================================
+
+Table "AuditLog" {
+  "Id"              uuid      [pk]
+  "UserId"          uuid      [ref: > "User"."Id"]
+  "SystemActor"     varchar
+  "Operation"       varchar   [not null]
+  "TargetEntity"    varchar
+  "TargetEntityId"  int
+  "DescriptionJson" clob
+  "Ip"              varchar
+  "UserAgent"       varchar
+  "RequestId"       uuid
+  "Success"         boolean   [not null, default: true]
+  "FailureReason"   varchar
+  "OperatedAt"      timestamp [not null, default: `now()`]
+}
+
+
+// =============================================================================
+// TABLE GROUPS
+// =============================================================================
+
+TableGroup "Users" {
+  "User"
+  "Credential"
+  "Address"
+  "AccessLog"
+  "AccessLogAction"
+}
+
+TableGroup "Farm" {
+  "Crop"
+  "Farm"
+  "Plot"
+  "Biome"
+  "ProductionSystem"
+  "PlotSituation"
+}
+
+TableGroup "Insurance Catalog" {
+  "Insurer"
+  "Insurance"
+  "InsuranceQuote"
+  "InsuranceQuoteSituation"
+  "InsurerSituation"
+  "InsuranceSituation"
+}
+
+TableGroup "Operation" {
+  "Policy"
+  "PolicyItem"
+  "Claim"
+  "ClaimItem"
+  "SatelliteAnalysis"
+  "PreventiveAlert"
+  "PolicySituation"
+  "ClaimSituation"
+  "ClaimEventType"
+  "ClaimCategory"
+  "ClaimSubCategory"
+  "SatelliteSource"
+  "SatelliteClass"
+  "AlertType"
+  "AlertSeverity"
+  "AlertSituation"
+  "RejectionReason"
+}
+
+TableGroup "Financial" {
+  "Payment"
+  "PaymentInvoice"
+  "PaymentType"
+  "PaymentSituation"
+}
+
+TableGroup "Audit" {
+  "AuditLog"
+}
