@@ -1,4 +1,4 @@
-package com.fiap.zenith.core_svc;
+package com.fiap.zenith.core;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;

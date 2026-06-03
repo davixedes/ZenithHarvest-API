@@ -1,0 +1,78 @@
+# =============================================================================
+# Zenith Harvest — infraestrutura local de desenvolvimento
+# =============================================================================
+# Sobe os 4 serviços de apoio. Os microsserviços Java (gateway/core-svc/analise-svc)
+# rodam fora do compose em dev (ex.: `cd core-svc && mvn spring-boot:run`), conectando
+# nas portas expostas abaixo. O core-svc já vem apontado para localhost:5432.
+#
+#   docker compose up -d
+# =============================================================================
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: zenith-postgres
+    environment:
+      POSTGRES_DB: zenith
+      POSTGRES_USER: zenith
+      POSTGRES_PASSWORD: zenith
+    ports:
+      - "5432:5432"
+    volumes:
+      - zenith-postgres-data:/var/lib/postgresql/data
+      # DDL canônico — roda automaticamente na 1ª inicialização (volume vazio), criando as 39 tabelas.
+      - ./db/schema/zenith_harvest_postgres.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zenith -d zenith"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongo:
+    image: mongo:7
+    container_name: zenith-mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: zenith
+      MONGO_INITDB_ROOT_PASSWORD: zenith
+      MONGO_INITDB_DATABASE: zenith
+    ports:
+      - "27017:27017"
+    volumes:
+      - zenith-mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: zenith-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: zenith
+      RABBITMQ_DEFAULT_PASS: zenith
+    ports:
+      - "5672:5672"     # protocolo AMQP
+      - "15672:15672"   # painel de administração (http://localhost:15672)
+    volumes:
+      - zenith-rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: zenith-ollama
+    ports:
+      - "11434:11434"   # API consumida pelo analise-svc (Spring AI)
+    volumes:
+      - zenith-ollama-data:/root/.ollama
+
+volumes:
+  zenith-postgres-data:
+  zenith-mongo-data:
+  zenith-rabbitmq-data:
+  zenith-ollama-data:

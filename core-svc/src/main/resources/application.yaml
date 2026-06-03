@@ -1,3 +1,41 @@
+server:
+  port: 8081
+
 spring:
   application:
     name: core-svc
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/zenith}
+    username: ${DB_USERNAME:zenith}
+    password: ${DB_PASSWORD:zenith}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    # Schema é gerido pelo script DDL (db/schema). NUNCA usar update — só validar.
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        # Tabelas/colunas em PascalCase exigem aspas em TODA query.
+        globally_quoted_identifiers: true
+        format_sql: true
+    show-sql: false
+
+  # Mensageria (publicação de eventos sinistro.aberto). Lazy: só conecta quando usado.
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:zenith}
+    password: ${RABBITMQ_PASSWORD:zenith}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
