@@ -1,0 +1,10 @@
+package com.fiap.zenith.core.domain.repository;
+
+import com.fiap.zenith.core.domain.entity.PaymentSituation;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+
+public interface PaymentSituationRepository extends JpaRepository<PaymentSituation, Integer> {
+    List<PaymentSituation> findAllByActiveTrue();
+}
