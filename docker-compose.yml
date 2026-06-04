@@ -23,6 +23,8 @@ services:
       - zenith-postgres-data:/var/lib/postgresql/data
       # DDL canônico — roda automaticamente na 1ª inicialização (volume vazio), criando as 39 tabelas.
       - ./db/schema/zenith_harvest_postgres.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      # Seed dos lookups — roda logo após o schema (ordem alfabética dos arquivos).
+      - ./db/seed/zenith_harvest_seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U zenith -d zenith"]
       interval: 10s

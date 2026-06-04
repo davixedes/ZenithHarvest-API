@@ -30,6 +30,13 @@ spring:
     username: ${RABBITMQ_USERNAME:zenith}
     password: ${RABBITMQ_PASSWORD:zenith}
 
+# Segurança — JWT assimétrico (RS256). O core assina com chave privada (gerada em memória,
+# ver JwtConfig) e publica a pública em /oauth2/jwks. Não há segredo compartilhado.
+zenith:
+  security:
+    jwt:
+      expiration-seconds: ${JWT_EXPIRATION_SECONDS:28800}   # 8h
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

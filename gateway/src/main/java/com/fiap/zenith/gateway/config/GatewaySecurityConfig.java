@@ -1,14 +1,10 @@
-package com.fiap.zenith.core.config;
+package com.fiap.zenith.gateway.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
-import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -17,20 +13,16 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.util.List;
 
 /**
- * Segurança e CORS do core-svc.
- *
- * <p>API stateless protegida por <strong>JWT</strong> (Bearer): o core atua como resource
- * server validando o token com a chave HS256 (ver {@link JwtConfig}). São públicas apenas as
- * rotas de autenticação, Swagger e health-check; o resto exige token.</p>
- *
- * <p>CORS habilitado (requisito do edital) para o app mobile React Native consumir a API.</p>
+ * Segurança da borda. Valida o JWT (RS256) buscando a chave pública do core via
+ * {@code spring.security.oauth2.resourceserver.jwt.jwk-set-uri} — <strong>sem segredo
+ * compartilhado</strong>; o {@code JwtDecoder} é autoconfigurado a partir dessa URI.
+ * Rotas públicas: {@code /auth/**}, Swagger e actuator/health. CORS habilitado p/ o mobile.
  */
 @Configuration
-public class SecurityConfig {
+public class GatewaySecurityConfig {
 
     private static final String[] PUBLIC_PATHS = {
             "/auth/**",
-            "/oauth2/jwks",
             "/swagger-ui.html",
             "/swagger-ui/**",
             "/v3/api-docs/**",
@@ -46,31 +38,13 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_PATHS).permitAll()
                         .anyRequest().authenticated())
-                .oauth2ResourceServer(oauth -> oauth
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())));
+                .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()));
         return http.build();
-    }
-
-    /** Lê as authorities do claim {@code roles} (já no formato {@code ROLE_*}, sem prefixo extra). */
-    private JwtAuthenticationConverter jwtAuthenticationConverter() {
-        JwtGrantedAuthoritiesConverter authorities = new JwtGrantedAuthoritiesConverter();
-        authorities.setAuthoritiesClaimName("roles");
-        authorities.setAuthorityPrefix("");
-
-        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
-        converter.setJwtGrantedAuthoritiesConverter(authorities);
-        return converter;
-    }
-
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
     }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        // Em dev liberamos qualquer origem; restringir às origens do app/gateway em produção.
         config.setAllowedOriginPatterns(List.of("*"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));

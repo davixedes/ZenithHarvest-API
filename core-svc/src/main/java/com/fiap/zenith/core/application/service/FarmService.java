@@ -4,6 +4,7 @@ import com.fiap.zenith.core.application.dto.CreateFarmRequest;
 import com.fiap.zenith.core.application.dto.FarmResponse;
 import com.fiap.zenith.core.application.dto.UpdateFarmRequest;
 import com.fiap.zenith.core.application.exception.DuplicateResourceException;
+import com.fiap.zenith.core.application.mapper.FarmMapper;
 import com.fiap.zenith.core.domain.entity.Farm;
 import com.fiap.zenith.core.domain.repository.FarmRepository;
 import jakarta.persistence.EntityNotFoundException;
@@ -23,9 +24,11 @@ import java.util.UUID;
 public class FarmService {
 
     private final FarmRepository farmRepository;
+    private final FarmMapper farmMapper;
 
-    public FarmService(FarmRepository farmRepository) {
+    public FarmService(FarmRepository farmRepository, FarmMapper farmMapper) {
         this.farmRepository = farmRepository;
+        this.farmMapper = farmMapper;
     }
 
     @Transactional
@@ -49,17 +52,17 @@ public class FarmService {
                 req.polygonWkt());
 
         Farm saved = farmRepository.save(farm);
-        return FarmResponse.from(saved);
+        return farmMapper.toResponse(saved);
     }
 
     @Transactional(readOnly = true)
     public FarmResponse buscarPorId(UUID id) {
-        return FarmResponse.from(buscarEntidade(id));
+        return farmMapper.toResponse(buscarEntidade(id));
     }
 
     @Transactional(readOnly = true)
     public Page<FarmResponse> listar(Pageable pageable) {
-        return farmRepository.findAllByDeletedAtIsNull(pageable).map(FarmResponse::from);
+        return farmRepository.findAllByDeletedAtIsNull(pageable).map(farmMapper::toResponse);
     }
 
     @Transactional
@@ -77,7 +80,7 @@ public class FarmService {
         farm.setPolygonWkt(req.polygonWkt());
         farm.setEditedAt(OffsetDateTime.now());
 
-        return FarmResponse.from(farm);
+        return farmMapper.toResponse(farm);
     }
 
     /** Soft delete: marca DeletedAt e inativa, mantendo a linha para auditoria. */
