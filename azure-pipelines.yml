@@ -131,13 +131,22 @@ stages:
                 displayName: 'Login Azure (service principal)'
 
               - script: |
+                  az containerapp registry set \
+                    --name $(containerAppName) \
+                    --resource-group $(resourceGroup) \
+                    --server $(acrLoginServer) \
+                    --username "$(ACR_USERNAME)" \
+                    --password "$(ACR_PASSWORD)"
+                displayName: 'Configurar credenciais do ACR'
+                env:
+                  ACR_USERNAME: $(ACR_USERNAME)
+                  ACR_PASSWORD: $(ACR_PASSWORD)
+
+              - script: |
                   az containerapp update \
                     --name $(containerAppName) \
                     --resource-group $(resourceGroup) \
                     --image $(acrLoginServer)/$(imageRepository):$(imageTag) \
-                    --registry-server $(acrLoginServer) \
-                    --registry-username "$(ACR_USERNAME)" \
-                    --registry-password "$(ACR_PASSWORD)" \
                     --set-env-vars \
                       SPRING_PROFILES_ACTIVE=prod \
                       SPRING_DATASOURCE_URL="jdbc:postgresql://$(PSQL_SERVER).postgres.database.azure.com:5432/$(psqlDb)?sslmode=require" \
@@ -145,9 +154,6 @@ stages:
                       SPRING_DATASOURCE_PASSWORD="$(PSQL_ADMIN_PASSWORD)" \
                       SPRING_JPA_HIBERNATE_DDL_AUTO=update
                 displayName: 'Atualizar Container App'
-                env:
-                  ACR_USERNAME: $(ACR_USERNAME)
-                  ACR_PASSWORD: $(ACR_PASSWORD)
 
               - script: |
                   FQDN=$(az containerapp show \
