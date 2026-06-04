@@ -1,9 +1,7 @@
 # =============================================================================
-# Zenith Harvest — infraestrutura local de desenvolvimento
+# Zenith Harvest — stack local completa
 # =============================================================================
-# Sobe os 4 serviços de apoio. Os microsserviços Java (gateway/core-svc/analise-svc)
-# rodam fora do compose em dev (ex.: `cd core-svc && mvn spring-boot:run`), conectando
-# nas portas expostas abaixo. O core-svc já vem apontado para localhost:5432.
+# Sobe infraestrutura + microsserviços Java do monorepo.
 #
 #   docker compose up -d
 # =============================================================================
@@ -72,6 +70,87 @@ services:
       - "11434:11434"   # API consumida pelo analise-svc (Spring AI)
     volumes:
       - zenith-ollama-data:/root/.ollama
+
+  core-svc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        MODULE: core-svc
+    container_name: zenith-core-svc
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/zenith
+      DB_USERNAME: zenith
+      DB_PASSWORD: zenith
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: zenith
+      RABBITMQ_PASSWORD: zenith
+      ANALISE_SVC_URI: http://analise-svc:8082
+      JWT_EXPIRATION_SECONDS: 28800
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  analise-svc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        MODULE: analise-svc
+    container_name: zenith-analise-svc
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USERNAME: zenith
+      POSTGRES_PASSWORD: zenith
+      MONGO_HOST: mongo
+      MONGO_USERNAME: zenith
+      MONGO_PASSWORD: zenith
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USERNAME: zenith
+      RABBITMQ_PASSWORD: zenith
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: llama3.2
+      JWK_SET_URI: http://core-svc:8081/oauth2/jwks
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+      core-svc:
+        condition: service_started
+    restart: unless-stopped
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        MODULE: gateway
+    container_name: zenith-gateway
+    environment:
+      JWK_SET_URI: http://core-svc:8081/oauth2/jwks
+      CORE_SVC_URI: http://core-svc:8081
+      ANALISE_SVC_URI: http://analise-svc:8082
+    ports:
+      - "8080:8080"
+    depends_on:
+      core-svc:
+        condition: service_started
+      analise-svc:
+        condition: service_started
+    restart: unless-stopped
 
 volumes:
   zenith-postgres-data:
