@@ -1,9 +1,9 @@
 #  ZenithHarvest API — CI/CD Pipeline (Azure DevOps)
 #
-#  CI : checkout → JDK 17 → testes (Postgres sidecar) → mvn package → docker push ACR
+#  CI : checkout → JDK 17 → mvn test (H2 em memoria) → mvn package → docker push ACR
 #  CD : deploy no Azure Container App (somente branch main)
 #
-#  Variaveis SECRETAS (Pipelines > Library > Variable Groups ou Edit > Variables):
+#  Variaveis SECRETAS (Pipelines > Edit > Variables):
 #    ACR_USERNAME          - admin do ACR (acrzenith)
 #    ACR_PASSWORD          - senha do ACR
 #    AZURE_CLIENT_ID       - service principal app ID
@@ -57,31 +57,12 @@ stages:
 
         - task: Cache@2
           displayName: 'Cache dependencias Maven'
-          continueOnError: true
           inputs:
             key: 'maven | "$(Agent.OS)" | **/pom.xml'
             restoreKeys: |
               maven | "$(Agent.OS)"
               maven
             path: $(HOME)/.m2/repository
-
-        # Sobe Postgres local para os testes de integração
-        - script: |
-            docker run -d \
-              --name zenithharvest-postgres-ci \
-              -e POSTGRES_USER=postgres \
-              -e POSTGRES_PASSWORD=postgres \
-              -e POSTGRES_DB=zenithharvest_test \
-              -p 5432:5432 \
-              postgres:16-alpine
-
-            echo "Aguardando Postgres..."
-            for i in $(seq 1 30); do
-              docker exec zenithharvest-postgres-ci \
-                pg_isready -U postgres -d zenithharvest_test > /dev/null 2>&1 && break
-              sleep 1
-            done
-          displayName: 'Subir Postgres (CI sidecar)'
 
         - task: Maven@4
           displayName: 'mvn test'
@@ -93,17 +74,6 @@ stages:
             testResultsFiles: '**/surefire-reports/TEST-*.xml'
             javaHomeOption: JDKVersion
             jdkVersionOption: '1.17'
-          env:
-            SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/zenithharvest_test
-            SPRING_DATASOURCE_USERNAME: postgres
-            SPRING_DATASOURCE_PASSWORD: postgres
-            SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
-
-        - script: |
-            docker stop zenithharvest-postgres-ci || true
-            docker rm   zenithharvest-postgres-ci || true
-          displayName: 'Parar Postgres (cleanup)'
-          condition: always()
 
         - task: Maven@4
           displayName: 'mvn package'
@@ -131,10 +101,6 @@ stages:
               --push \
               .
           displayName: 'Build & push imagem Docker'
-
-        - script: |
-            echo "Imagem publicada: $(acrLoginServer)/$(imageRepository):$(imageTag)"
-          displayName: 'Resumo do artefato'
 
 # ─── STAGE 2 — CD ─────────────────────────────────────────────────────────────
 - stage: CD
@@ -174,10 +140,7 @@ stages:
                       SPRING_DATASOURCE_URL="jdbc:postgresql://$(PSQL_SERVER).postgres.database.azure.com:5432/$(psqlDb)?sslmode=require" \
                       SPRING_DATASOURCE_USERNAME="$(psqlAdmin)" \
                       SPRING_DATASOURCE_PASSWORD="$(PSQL_ADMIN_PASSWORD)" \
-                      SPRING_JPA_HIBERNATE_DDL_AUTO=update \
-                      DD_SERVICE=zenithharvest-api \
-                      DD_ENV=prod \
-                      DD_VERSION=$(imageTag)
+                      SPRING_JPA_HIBERNATE_DDL_AUTO=update
                 displayName: 'Atualizar Container App'
 
               - script: |
@@ -186,7 +149,7 @@ stages:
                     --resource-group $(resourceGroup) \
                     --query properties.configuration.ingress.fqdn -o tsv)
                   echo "API disponivel em: https://$FQDN"
-                  echo "Swagger:           https://$FQDN/swagger-ui/index.html"
+                  echo "Health:            https://$FQDN/actuator/health"
                 displayName: 'Mostrar URL publica'
 
               - script: az logout
