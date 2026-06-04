@@ -1,0 +1,169 @@
+#  ZenithHarvest API — CI/CD Pipeline (Azure DevOps)
+#
+#  CI : checkout → JDK 17 → mvn test (H2 em memoria) → mvn package → docker push ACR
+#  CD : deploy no Azure Container App (somente branch main)
+#
+#  Variaveis SECRETAS (Pipelines > Edit > Variables):
+#    ACR_USERNAME          - admin do ACR (acrzenith)
+#    ACR_PASSWORD          - senha do ACR
+#    AZURE_CLIENT_ID       - service principal app ID
+#    AZURE_CLIENT_SECRET   - service principal secret
+#    AZURE_TENANT_ID       - tenant ID
+#    AZURE_SUBSCRIPTION_ID - subscription ID
+#    PSQL_ADMIN_PASSWORD   - senha do PostgreSQL
+#    PSQL_SERVER           - nome do servidor (psql-zenithharvest)
+
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+variables:
+  acrLoginServer: 'acrzenith.azurecr.io'
+  imageRepository: 'zenithharvest-api'
+  imageTag: '$(Build.BuildId)'
+  resourceGroup: 'rg-zenithharvest'
+  containerAppName: 'aca-zenithharvest'
+  psqlDb: 'db-zenithharvest'
+  psqlAdmin: 'zenith_admin'
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+
+# ─── STAGE 1 — CI ─────────────────────────────────────────────────────────────
+- stage: CI
+  displayName: 'CI — Build, Test & Push'
+  jobs:
+    - job: BuildTestPush
+      displayName: 'Maven build + Docker push'
+      steps:
+
+        - checkout: self
+          displayName: 'Checkout'
+
+        - task: JavaToolInstaller@0
+          displayName: 'Instalar JDK 17'
+          inputs:
+            versionSpec: '17'
+            jdkArchitectureOption: x64
+            jdkSourceOption: PreInstalled
+
+        - task: Cache@2
+          displayName: 'Cache dependencias Maven'
+          inputs:
+            key: 'maven | "$(Agent.OS)" | **/pom.xml'
+            restoreKeys: |
+              maven | "$(Agent.OS)"
+              maven
+            path: $(HOME)/.m2/repository
+
+        - task: Maven@4
+          displayName: 'mvn test'
+          inputs:
+            mavenPomFile: 'pom.xml'
+            goals: 'test'
+            options: '-B'
+            publishJUnitResults: true
+            testResultsFiles: '**/surefire-reports/TEST-*.xml'
+            javaHomeOption: JDKVersion
+            jdkVersionOption: '1.17'
+
+        - task: Maven@4
+          displayName: 'mvn package'
+          inputs:
+            mavenPomFile: 'pom.xml'
+            goals: 'package'
+            options: '-B -DskipTests'
+            javaHomeOption: JDKVersion
+            jdkVersionOption: '1.17'
+
+        - script: |
+            echo "$(ACR_PASSWORD)" | docker login $(acrLoginServer) \
+              -u "$(ACR_USERNAME)" --password-stdin
+          displayName: 'Login no ACR'
+          env:
+            ACR_USERNAME: $(ACR_USERNAME)
+            ACR_PASSWORD: $(ACR_PASSWORD)
+
+        - script: |
+            docker buildx build \
+              --platform linux/amd64 \
+              -t $(acrLoginServer)/$(imageRepository):$(imageTag) \
+              -t $(acrLoginServer)/$(imageRepository):latest \
+              -f Dockerfile \
+              --push \
+              .
+          displayName: 'Build & push imagem Docker'
+
+# ─── STAGE 2 — CD ─────────────────────────────────────────────────────────────
+- stage: CD
+  displayName: 'CD — Deploy Container App'
+  dependsOn: CI
+  condition: |
+    and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  jobs:
+    - deployment: Deploy
+      displayName: 'Deploy aca-zenithharvest'
+      environment: 'production'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+
+              - script: |
+                  curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+                  az extension add --name containerapp --upgrade --only-show-errors
+                displayName: 'Instalar Azure CLI + containerapp'
+
+              - script: |
+                  az login --service-principal \
+                    -u "$(AZURE_CLIENT_ID)" \
+                    -p "$(AZURE_CLIENT_SECRET)" \
+                    --tenant "$(AZURE_TENANT_ID)"
+                  az account set --subscription "$(AZURE_SUBSCRIPTION_ID)"
+                displayName: 'Login Azure (service principal)'
+
+              - script: |
+                  az containerapp registry set \
+                    --name $(containerAppName) \
+                    --resource-group $(resourceGroup) \
+                    --server $(acrLoginServer) \
+                    --username "$(ACR_USERNAME)" \
+                    --password "$(ACR_PASSWORD)"
+                displayName: 'Configurar credenciais do ACR'
+                env:
+                  ACR_USERNAME: $(ACR_USERNAME)
+                  ACR_PASSWORD: $(ACR_PASSWORD)
+
+              - script: |
+                  az containerapp update \
+                    --name $(containerAppName) \
+                    --resource-group $(resourceGroup) \
+                    --image $(acrLoginServer)/$(imageRepository):$(imageTag) \
+                    --set-env-vars \
+                      SPRING_PROFILES_ACTIVE=prod \
+                      SPRING_DATASOURCE_URL="jdbc:postgresql://$(PSQL_SERVER).postgres.database.azure.com:5432/$(psqlDb)?sslmode=require" \
+                      SPRING_DATASOURCE_USERNAME="$(psqlAdmin)" \
+                      SPRING_DATASOURCE_PASSWORD="$(PSQL_ADMIN_PASSWORD)" \
+                      SPRING_JPA_HIBERNATE_DDL_AUTO=update
+                displayName: 'Atualizar Container App'
+
+              - script: |
+                  FQDN=$(az containerapp show \
+                    --name $(containerAppName) \
+                    --resource-group $(resourceGroup) \
+                    --query properties.configuration.ingress.fqdn -o tsv)
+                  echo "API disponivel em: https://$FQDN"
+                  echo "Health:            https://$FQDN/actuator/health"
+                displayName: 'Mostrar URL publica'
+
+              - script: az logout
+                displayName: 'Logout Azure'
+                condition: always()
