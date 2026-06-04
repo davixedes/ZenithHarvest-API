@@ -57,6 +57,7 @@ stages:
 
         - task: Cache@2
           displayName: 'Cache dependencias Maven'
+          continueOnError: true
           inputs:
             key: 'maven | "$(Agent.OS)" | **/pom.xml'
             restoreKeys: |
