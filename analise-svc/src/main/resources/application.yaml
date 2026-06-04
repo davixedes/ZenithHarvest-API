@@ -1,3 +1,57 @@
+server:
+  port: 8082
+
 spring:
   application:
     name: analise-svc
+
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:5432/zenith
+    username: ${POSTGRES_USERNAME:zenith}
+    password: ${POSTGRES_PASSWORD:zenith}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        globally_quoted_identifiers: true
+        format_sql: false
+    show-sql: false
+
+  data:
+    mongodb:
+      uri: mongodb://${MONGO_USERNAME:zenith}:${MONGO_PASSWORD:zenith}@${MONGO_HOST:localhost}:27017/zenith?authSource=admin
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: 5672
+    username: ${RABBITMQ_USERNAME:zenith}
+    password: ${RABBITMQ_PASSWORD:zenith}
+
+  ai:
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      chat:
+        model: ${OLLAMA_MODEL:llama3.2}
+        options:
+          temperature: 0.3
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Valida JWT pela chave pública do core-svc (JWKS)
+          jwk-set-uri: ${JWK_SET_URI:http://localhost:8081/oauth2/jwks}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
