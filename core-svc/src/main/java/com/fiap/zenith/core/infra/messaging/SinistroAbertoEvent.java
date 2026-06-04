@@ -14,5 +14,7 @@ public record SinistroAbertoEvent(
         BigDecimal ndviBefore,
         BigDecimal openingGpsLat,
         BigDecimal openingGpsLng,
-        String description
+        String description,
+        BigDecimal insuredAmount,   // Policy.InsuredAmount — base do cálculo de indenização
+        BigDecimal plotAreaM2       // Plot.AreaHectares * 10000 — área real do talhão
 ) {}

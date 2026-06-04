@@ -30,6 +30,10 @@ public class SatelliteAnalysisService {
     private static final int SATELLITE_CLASS_ESTRESSE_LEVE = 2;
     private static final int SATELLITE_CLASS_SAUDAVEL = 1;
 
+    // ClaimSituation (seed): 2=Em análise, 3=Aprovado
+    private static final int SINISTRO_EM_ANALISE = 2;
+    private static final int SINISTRO_APROVADO = 3;
+
     private final SatelliteAnalysisRepository satelliteAnalysisRepository;
     private final HistoricoNdviRepository historicoNdviRepository;
     private final LaudoService laudoService;
@@ -42,18 +46,27 @@ public class SatelliteAnalysisService {
         this.laudoService = laudoService;
     }
 
+    /** Defaults usados apenas quando o evento não traz os dados (apólice/talhão incompletos). */
+    private static final BigDecimal DEFAULT_NDVI_BEFORE = new BigDecimal("0.65");
+    private static final BigDecimal DEFAULT_INSURED_AMOUNT = new BigDecimal("100000.00");
+    private static final BigDecimal DEFAULT_PLOT_AREA_M2 = new BigDecimal("10000.00");
+
     @Transactional
     public ClaimAnalisadoEvent analisarSinistro(SinistroAbertoEvent evento) {
-        BigDecimal ndviBefore = evento.ndviBefore() != null ? evento.ndviBefore() : new BigDecimal("0.65");
+        BigDecimal ndviBefore = evento.ndviBefore() != null ? evento.ndviBefore() : DEFAULT_NDVI_BEFORE;
+        BigDecimal insuredAmount = evento.insuredAmount() != null ? evento.insuredAmount() : DEFAULT_INSURED_AMOUNT;
+        BigDecimal plotAreaM2 = evento.plotAreaM2() != null ? evento.plotAreaM2() : DEFAULT_PLOT_AREA_M2;
+
         BigDecimal ndviAfter = calcularNdviPosEvento(ndviBefore);
         BigDecimal totalLossPct = calcularPercentualPerda(ndviBefore, ndviAfter);
         BigDecimal mlConfidence = new BigDecimal("0.87");
         boolean fraudFlag = mlConfidence.compareTo(new BigDecimal("0.30")) < 0;
         int satelliteClassId = classificarNdvi(ndviAfter);
 
-        BigDecimal affectedAreaM2 = new BigDecimal("50000.00");
-        BigDecimal calculatedAmount = totalLossPct.divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP)
-                .multiply(new BigDecimal("500000.00")).setScale(2, RoundingMode.HALF_UP);
+        // Área afetada proporcional à perda; indenização proporcional ao valor segurado real.
+        BigDecimal lossFraction = totalLossPct.divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
+        BigDecimal affectedAreaM2 = plotAreaM2.multiply(lossFraction).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal calculatedAmount = insuredAmount.multiply(lossFraction).setScale(2, RoundingMode.HALF_UP);
 
         SatelliteAnalysis analysis = SatelliteAnalysis.create(
                 evento.claimId(), evento.plotId(), SATELLITE_SOURCE_SENTINEL2,
@@ -69,8 +82,8 @@ public class SatelliteAnalysisService {
 
         String laudo = laudoService.gerarLaudo(evento, ndviAfter, totalLossPct, mlConfidence.multiply(new BigDecimal("100")));
 
-        // situação 2 = Em análise, 3 = Aprovado
-        int newSituationId = fraudFlag ? 2 : 3;
+        // Suspeita de fraude exige análise humana; senão aprova automaticamente.
+        int newSituationId = fraudFlag ? SINISTRO_EM_ANALISE : SINISTRO_APROVADO;
 
         return new ClaimAnalisadoEvent(
                 evento.claimId(), ndviAfter, totalLossPct,
