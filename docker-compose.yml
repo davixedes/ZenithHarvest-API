@@ -70,6 +70,31 @@ services:
       - "11434:11434"   # API consumida pelo analise-svc (Spring AI)
     volumes:
       - zenith-ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    container_name: zenith-ollama-pull
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_MODEL: llama3.2
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        until ollama list >/dev/null 2>&1; do
+          sleep 2
+        done
+        ollama pull "${OLLAMA_MODEL}"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
 
   core-svc:
     build:
@@ -95,6 +120,11 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
     restart: unless-stopped
 
   analise-svc:
@@ -127,9 +157,16 @@ services:
       rabbitmq:
         condition: service_healthy
       ollama:
-        condition: service_started
+        condition: service_healthy
+      ollama-pull:
+        condition: service_completed_successfully
       core-svc:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8082/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
     restart: unless-stopped
 
   gateway:
@@ -147,9 +184,14 @@ services:
       - "8080:8080"
     depends_on:
       core-svc:
-        condition: service_started
+        condition: service_healthy
       analise-svc:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
     restart: unless-stopped
 
 volumes:

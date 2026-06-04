@@ -36,6 +36,10 @@ ARG MODULE=core-svc
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /workspace/${MODULE}/target/${MODULE}-0.0.1-SNAPSHOT.jar app.jar
 
 EXPOSE 8080 8081 8082
