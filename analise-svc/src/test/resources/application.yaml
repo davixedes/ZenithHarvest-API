@@ -1,0 +1,41 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:analise;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=FALSE;DEFAULT_NULL_ORDERING=HIGH
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate:
+        globally_quoted_identifiers: true
+
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/zenith-test
+
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: zenith
+    password: zenith
+    listener:
+      simple:
+        auto-startup: false
+      direct:
+        auto-startup: false
+
+  ai:
+    ollama:
+      base-url: http://localhost:11434
+      chat:
+        model: llama3.2
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:8081/oauth2/jwks
