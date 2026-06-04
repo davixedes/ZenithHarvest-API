@@ -227,6 +227,21 @@ Entregas em OUTROS repositórios/disciplinas: API .NET, mobile React Native, TOG
 
 ---
 
+## Agentes e skills disponíveis (`.claude/`)
+
+Use proativamente — não espere o usuário pedir.
+
+| Ferramenta | Tipo | Quando acionar |
+|---|---|---|
+| `code-reviewer` | agent | Após escrever ou alterar qualquer classe Java (entity, controller, service, config); antes de commitar |
+| `feature-planner` | agent | Antes de implementar uma feature nova — produz plano técnico (entidades, endpoints, fluxo, eventos) |
+| `solid-reviewer` | agent | Quando o usuário pedir revisão SOLID, ou após escrever services/controllers com muitas dependências |
+| `jpa-entity` | skill | Ao criar ou alterar um `@Entity` — garante PK, tipos, NOT NULL conservador e nomes PascalCase corretos |
+| `rest-endpoint` | skill | Ao adicionar qualquer rota nova — garante DTO, `@Valid`, HATEOAS, `@Transactional` e camadas corretas |
+| `rabbitmq-event` | skill | Ao criar publisher ou consumer RabbitMQ — garante naming de exchange/queue/DLQ e idempotência |
+
+---
+
 ## O que NÃO fazer
 
 - Não expor entidades JPA direto na API (use DTO).
