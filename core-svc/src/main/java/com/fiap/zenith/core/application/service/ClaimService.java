@@ -6,7 +6,7 @@ import com.fiap.zenith.core.application.mapper.ClaimMapper;
 import com.fiap.zenith.core.domain.entity.Claim;
 import com.fiap.zenith.core.domain.entity.Plot;
 import com.fiap.zenith.core.domain.entity.Policy;
-import com.fiap.zenith.core.domain.enums.SituacaoIds;
+import com.fiap.zenith.core.domain.enums.ClaimSituation;
 import com.fiap.zenith.core.domain.repository.ClaimRepository;
 import com.fiap.zenith.core.domain.repository.PlotRepository;
 import com.fiap.zenith.core.domain.repository.PolicyRepository;
@@ -93,22 +93,22 @@ public class ClaimService {
                 .map(claimMapper::toResponse);
     }
 
-    /** Aprova manualmente o sinistro (situação 3 = Aprovado no seed). */
+    /** Aprova manualmente o sinistro (ClaimSituation.APROVADO no seed canônico). */
     @Transactional
     public ClaimResponse aprovar(UUID id, java.math.BigDecimal approvedAmount) {
         Claim claim = buscarEntidade(id);
-        claim.setClaimSituationId(SituacaoIds.SINISTRO_APROVADO);
+        claim.setClaimSituationId(ClaimSituation.APROVADO);
         claim.setApprovedAmount(approvedAmount);
         claim.setApprovedAt(OffsetDateTime.now());
         claim.setEditedAt(OffsetDateTime.now());
         return claimMapper.toResponse(claim);
     }
 
-    /** Rejeita o sinistro com motivo (situação 4 = Rejeitado no seed). */
+    /** Rejeita o sinistro com motivo (ClaimSituation.REJEITADO no seed canônico). */
     @Transactional
     public ClaimResponse rejeitar(UUID id, Integer rejectionReasonId) {
         Claim claim = buscarEntidade(id);
-        claim.setClaimSituationId(SituacaoIds.SINISTRO_REJEITADO);
+        claim.setClaimSituationId(ClaimSituation.REJEITADO);
         claim.setRejectionReasonId(rejectionReasonId);
         claim.setEditedAt(OffsetDateTime.now());
         return claimMapper.toResponse(claim);

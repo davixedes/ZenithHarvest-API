@@ -4,7 +4,7 @@ import com.fiap.zenith.core.application.dto.CreateInsuranceQuoteRequest;
 import com.fiap.zenith.core.application.dto.InsuranceQuoteResponse;
 import com.fiap.zenith.core.application.mapper.InsuranceQuoteMapper;
 import com.fiap.zenith.core.domain.entity.InsuranceQuote;
-import com.fiap.zenith.core.domain.enums.SituacaoIds;
+import com.fiap.zenith.core.domain.enums.InsuranceQuoteSituation;
 import com.fiap.zenith.core.domain.repository.InsuranceQuoteRepository;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.data.domain.Page;
@@ -55,7 +55,7 @@ public class InsuranceQuoteService {
     @Transactional
     public InsuranceQuoteResponse aceitar(UUID id) {
         InsuranceQuote quote = buscarEntidade(id);
-        quote.setQuoteSituationId(SituacaoIds.COTACAO_ACEITA);
+        quote.setQuoteSituationId(InsuranceQuoteSituation.ACEITA);
         quote.setAcceptedAt(OffsetDateTime.now());
         quote.setEditedAt(OffsetDateTime.now());
         return quoteMapper.toResponse(quote);

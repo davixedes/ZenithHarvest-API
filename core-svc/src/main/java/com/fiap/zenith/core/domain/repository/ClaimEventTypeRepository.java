@@ -7,4 +7,5 @@ import java.util.List;
 
 public interface ClaimEventTypeRepository extends JpaRepository<ClaimEventType, Integer> {
     List<ClaimEventType> findAllByActiveTrue();
+    boolean existsByIdAndActiveTrueAndDeletedAtIsNull(Integer id);
 }

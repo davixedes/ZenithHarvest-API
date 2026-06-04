@@ -1,0 +1,32 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:zenith;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=FALSE;DEFAULT_NULL_ORDERING=HIGH;NON_KEYWORDS=USER
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate:
+        globally_quoted_identifiers: true
+
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: zenith
+    password: zenith
+    listener:
+      simple:
+        auto-startup: false
+      direct:
+        auto-startup: false
+
+zenith:
+  security:
+    jwt:
+      expiration-seconds: 28800
+  clients:
+    analise-uri: http://localhost:8082

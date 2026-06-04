@@ -72,6 +72,7 @@ public class PolicyController {
     private EntityModel<PolicyResponse> toModel(PolicyResponse p) {
         return EntityModel.of(p,
                 linkTo(methodOn(PolicyController.class).buscar(p.id())).withSelfRel(),
-                linkTo(methodOn(PolicyController.class).listar(Pageable.unpaged())).withRel("policies"));
+                linkTo(methodOn(PolicyController.class).listar(Pageable.unpaged())).withRel("policies"),
+                linkTo(methodOn(PolicyItemController.class).listar(Pageable.unpaged(), p.id())).withRel("policy-items"));
     }
 }

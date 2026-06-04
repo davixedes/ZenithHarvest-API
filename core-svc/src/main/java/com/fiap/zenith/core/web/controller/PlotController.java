@@ -90,6 +90,8 @@ public class PlotController {
     private EntityModel<PlotResponse> toModel(PlotResponse plot) {
         return EntityModel.of(plot,
                 linkTo(methodOn(PlotController.class).buscar(plot.id())).withSelfRel(),
-                linkTo(methodOn(PlotController.class).listar(Pageable.unpaged())).withRel("plots"));
+                linkTo(methodOn(PlotController.class).listar(Pageable.unpaged())).withRel("plots"),
+                linkTo(methodOn(PreventiveAlertController.class).listar(Pageable.unpaged(), plot.id()))
+                        .withRel("preventive-alerts"));
     }
 }

@@ -80,6 +80,7 @@ public class ClaimController {
     private EntityModel<ClaimResponse> toModel(ClaimResponse c) {
         return EntityModel.of(c,
                 linkTo(methodOn(ClaimController.class).buscar(c.id())).withSelfRel(),
-                linkTo(methodOn(ClaimController.class).listar(Pageable.unpaged())).withRel("claims"));
+                linkTo(methodOn(ClaimController.class).listar(Pageable.unpaged())).withRel("claims"),
+                linkTo(methodOn(ClaimItemController.class).listar(Pageable.unpaged(), c.id())).withRel("claim-items"));
     }
 }

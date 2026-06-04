@@ -7,4 +7,5 @@ import java.util.List;
 
 public interface AlertTypeRepository extends JpaRepository<AlertType, Integer> {
     List<AlertType> findAllByActiveTrue();
+    boolean existsByIdAndActiveTrue(Integer id);
 }
