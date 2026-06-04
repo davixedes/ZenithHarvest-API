@@ -4,6 +4,7 @@ import com.fiap.zenith.core.application.dto.CreatePaymentRequest;
 import com.fiap.zenith.core.application.dto.PaymentResponse;
 import com.fiap.zenith.core.application.mapper.PaymentMapper;
 import com.fiap.zenith.core.domain.entity.Payment;
+import com.fiap.zenith.core.domain.enums.SituacaoIds;
 import com.fiap.zenith.core.domain.repository.PaymentRepository;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.data.domain.Page;
@@ -47,7 +48,7 @@ public class PaymentService {
     @Transactional
     public PaymentResponse confirmar(UUID id, String pspTransactionId) {
         Payment payment = buscarEntidade(id);
-        payment.setPaymentSituationId(3); // Confirmado
+        payment.setPaymentSituationId(SituacaoIds.PAGAMENTO_CONFIRMADO);
         payment.setPspTransactionId(pspTransactionId);
         payment.setConfirmedAt(OffsetDateTime.now());
         payment.setEditedAt(OffsetDateTime.now());

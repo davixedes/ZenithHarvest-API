@@ -5,6 +5,7 @@ import com.fiap.zenith.core.application.dto.PolicyResponse;
 import com.fiap.zenith.core.application.exception.DuplicateResourceException;
 import com.fiap.zenith.core.application.mapper.PolicyMapper;
 import com.fiap.zenith.core.domain.entity.Policy;
+import com.fiap.zenith.core.domain.enums.SituacaoIds;
 import com.fiap.zenith.core.domain.repository.PolicyRepository;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.data.domain.Page;
@@ -51,7 +52,7 @@ public class PolicyService {
     @Transactional
     public void cancelar(UUID id) {
         Policy policy = buscarEntidade(id);
-        policy.setPolicySituationId(3); // Cancelada — seed id=3
+        policy.setPolicySituationId(SituacaoIds.APOLICE_CANCELADA);
         policy.setCancelledAt(OffsetDateTime.now());
         policy.setEditedAt(OffsetDateTime.now());
     }
