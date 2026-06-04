@@ -1,6 +1,7 @@
 package com.fiap.zenith.core.web.controller;
 
 import com.fiap.zenith.core.application.dto.CreatePlotRequest;
+import com.fiap.zenith.core.application.dto.NdviHistoricoResponse;
 import com.fiap.zenith.core.application.dto.PlotResponse;
 import com.fiap.zenith.core.application.dto.UpdatePlotRequest;
 import com.fiap.zenith.core.application.service.PlotService;
@@ -64,6 +65,12 @@ public class PlotController {
         List<EntityModel<PlotResponse>> items = page.map(this::toModel).getContent();
         return CollectionModel.of(items,
                 linkTo(methodOn(PlotController.class).listarPorFazenda(farmId, pageable)).withSelfRel());
+    }
+
+    @GetMapping("/api/plots/{id}/ndvi-historico")
+    @Operation(summary = "Histórico de NDVI do talhão — busca no analise-svc via Feign (síncrono)")
+    public List<NdviHistoricoResponse> historicoNdvi(@PathVariable UUID id) {
+        return plotService.historicoNdvi(id);
     }
 
     @PutMapping("/api/plots/{id}")

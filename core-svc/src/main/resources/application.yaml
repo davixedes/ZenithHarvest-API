@@ -36,6 +36,9 @@ zenith:
   security:
     jwt:
       expiration-seconds: ${JWT_EXPIRATION_SECONDS:28800}   # 8h
+  # Destinos das chamadas Feign síncronas.
+  clients:
+    analise-uri: ${ANALISE_SVC_URI:http://localhost:8082}
 
 springdoc:
   swagger-ui:

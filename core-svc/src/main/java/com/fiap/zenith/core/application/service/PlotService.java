@@ -1,12 +1,14 @@
 package com.fiap.zenith.core.application.service;
 
 import com.fiap.zenith.core.application.dto.CreatePlotRequest;
+import com.fiap.zenith.core.application.dto.NdviHistoricoResponse;
 import com.fiap.zenith.core.application.dto.PlotResponse;
 import com.fiap.zenith.core.application.dto.UpdatePlotRequest;
 import com.fiap.zenith.core.application.exception.DuplicateResourceException;
 import com.fiap.zenith.core.application.mapper.PlotMapper;
 import com.fiap.zenith.core.domain.entity.Plot;
 import com.fiap.zenith.core.domain.repository.PlotRepository;
+import com.fiap.zenith.core.infra.feign.AnaliseClient;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -14,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -21,10 +24,20 @@ public class PlotService {
 
     private final PlotRepository plotRepository;
     private final PlotMapper plotMapper;
+    private final AnaliseClient analiseClient;
 
-    public PlotService(PlotRepository plotRepository, PlotMapper plotMapper) {
+    public PlotService(PlotRepository plotRepository, PlotMapper plotMapper,
+                       AnaliseClient analiseClient) {
         this.plotRepository = plotRepository;
         this.plotMapper = plotMapper;
+        this.analiseClient = analiseClient;
+    }
+
+    /** Histórico de NDVI do talhão — chamada SÍNCRONA ao analise-svc via Feign. */
+    @Transactional(readOnly = true)
+    public List<NdviHistoricoResponse> historicoNdvi(UUID plotId) {
+        buscarEntidade(plotId); // valida que o talhão existe antes de chamar o outro serviço
+        return analiseClient.buscarHistoricoNdvi(plotId);
     }
 
     @Transactional
