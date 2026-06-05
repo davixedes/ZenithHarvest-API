@@ -147,6 +147,9 @@ services:
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_MODEL: llama3.2
       JWK_SET_URI: http://core-svc:8081/oauth2/jwks
+      SENTINEL_HUB_ENABLED: ${SENTINEL_HUB_ENABLED:-false}
+      SENTINEL_HUB_CLIENT_ID: ${SENTINEL_HUB_CLIENT_ID:-}
+      SENTINEL_HUB_CLIENT_SECRET: ${SENTINEL_HUB_CLIENT_SECRET:-}
     ports:
       - "8082:8082"
     depends_on:
