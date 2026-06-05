@@ -5,6 +5,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.ServerResponse;
 
+import java.net.URI;
+
 import static org.springframework.cloud.gateway.server.mvc.handler.GatewayRouterFunctions.route;
 import static org.springframework.cloud.gateway.server.mvc.handler.HandlerFunctions.http;
 import static org.springframework.cloud.gateway.server.mvc.predicate.GatewayRequestPredicates.path;
@@ -24,10 +26,10 @@ public class GatewayRoutesConfig {
             org.springframework.core.env.Environment env) {
         String coreUri = env.getProperty("zenith.gateway.core-uri", "http://localhost:8081");
         return route("core-svc")
-                .route(path("/auth/**"), http(coreUri))
-                .route(path("/api/**"), http(coreUri))
-                .route(path("/swagger-ui/**"), http(coreUri))
-                .route(path("/v3/api-docs/**"), http(coreUri))
+                .route(path("/auth/**"), http(URI.create(coreUri)))
+                .route(path("/api/**"), http(URI.create(coreUri)))
+                .route(path("/swagger-ui/**"), http(URI.create(coreUri)))
+                .route(path("/v3/api-docs/**"), http(URI.create(coreUri)))
                 .build();
     }
 }
