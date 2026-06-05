@@ -39,3 +39,8 @@ spring:
       resourceserver:
         jwt:
           jwk-set-uri: http://localhost:8081/oauth2/jwks
+
+zenith:
+  satellite:
+    sentinel-hub:
+      enabled: false

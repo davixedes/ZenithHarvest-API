@@ -55,3 +55,15 @@ management:
     web:
       exposure:
         include: health,info
+
+zenith:
+  satellite:
+    sentinel-hub:
+      enabled: ${SENTINEL_HUB_ENABLED:false}
+      client-id: ${SENTINEL_HUB_CLIENT_ID:}
+      client-secret: ${SENTINEL_HUB_CLIENT_SECRET:}
+      token-url: ${SENTINEL_HUB_TOKEN_URL:https://services.sentinel-hub.com/auth/realms/main/protocol/openid-connect/token}
+      statistics-url: ${SENTINEL_HUB_STATISTICS_URL:https://services.sentinel-hub.com/api/v1/statistics}
+      collection: ${SENTINEL_HUB_COLLECTION:sentinel-2-l2a}
+      days-back: ${SENTINEL_HUB_DAYS_BACK:10}
+      resolution-meters: ${SENTINEL_HUB_RESOLUTION_METERS:10}

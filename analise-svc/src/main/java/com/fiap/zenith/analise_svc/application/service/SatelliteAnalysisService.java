@@ -6,13 +6,17 @@ import com.fiap.zenith.analise_svc.domain.repository.HistoricoNdviRepository;
 import com.fiap.zenith.analise_svc.domain.repository.SatelliteAnalysisRepository;
 import com.fiap.zenith.analise_svc.infra.messaging.ClaimAnalisadoEvent;
 import com.fiap.zenith.analise_svc.infra.messaging.SinistroAbertoEvent;
+import com.fiap.zenith.analise_svc.infra.satellite.SentinelHubIntegrationException;
+import com.fiap.zenith.analise_svc.infra.satellite.SentinelHubObservation;
+import com.fiap.zenith.analise_svc.infra.satellite.SentinelHubService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
-import java.util.Random;
 
 /**
  * Orquestra a análise satelital de um sinistro:
@@ -23,6 +27,8 @@ import java.util.Random;
  */
 @Service
 public class SatelliteAnalysisService {
+
+    private static final Logger log = LoggerFactory.getLogger(SatelliteAnalysisService.class);
 
     private static final int SATELLITE_SOURCE_SENTINEL2 = 1;
     private static final int SATELLITE_CLASS_ESTRESSE_SEVERO = 4;
@@ -37,13 +43,16 @@ public class SatelliteAnalysisService {
     private final SatelliteAnalysisRepository satelliteAnalysisRepository;
     private final HistoricoNdviRepository historicoNdviRepository;
     private final LaudoService laudoService;
+    private final SentinelHubService sentinelHubService;
 
     public SatelliteAnalysisService(SatelliteAnalysisRepository satelliteAnalysisRepository,
                                      HistoricoNdviRepository historicoNdviRepository,
-                                     LaudoService laudoService) {
+                                     LaudoService laudoService,
+                                     SentinelHubService sentinelHubService) {
         this.satelliteAnalysisRepository = satelliteAnalysisRepository;
         this.historicoNdviRepository = historicoNdviRepository;
         this.laudoService = laudoService;
+        this.sentinelHubService = sentinelHubService;
     }
 
     /** Defaults usados apenas quando o evento não traz os dados (apólice/talhão incompletos). */
@@ -57,7 +66,8 @@ public class SatelliteAnalysisService {
         BigDecimal insuredAmount = evento.insuredAmount() != null ? evento.insuredAmount() : DEFAULT_INSURED_AMOUNT;
         BigDecimal plotAreaM2 = evento.plotAreaM2() != null ? evento.plotAreaM2() : DEFAULT_PLOT_AREA_M2;
 
-        BigDecimal ndviAfter = calcularNdviPosEvento(ndviBefore);
+        SentinelHubObservation observation = buscarObservacao(evento, ndviBefore);
+        BigDecimal ndviAfter = observation.ndvi();
         BigDecimal totalLossPct = calcularPercentualPerda(ndviBefore, ndviAfter);
         BigDecimal mlConfidence = new BigDecimal("0.87");
         boolean fraudFlag = mlConfidence.compareTo(new BigDecimal("0.30")) < 0;
@@ -72,13 +82,13 @@ public class SatelliteAnalysisService {
                 evento.claimId(), evento.plotId(), SATELLITE_SOURCE_SENTINEL2,
                 satelliteClassId, LocalDate.now(), ndviAfter,
                 ndviAfter.multiply(new BigDecimal("0.85")).setScale(3, RoundingMode.HALF_UP),
-                new BigDecimal("5.00"), affectedAreaM2, mlConfidence);
+                observation.cloudCoveragePct(), affectedAreaM2, mlConfidence);
         satelliteAnalysisRepository.save(analysis);
 
         historicoNdviRepository.save(HistoricoNdviDocument.create(
                 evento.plotId(), evento.claimId(), LocalDate.now(),
                 ndviAfter, ndviAfter.multiply(new BigDecimal("0.85")).setScale(3, RoundingMode.HALF_UP),
-                "Sentinel-2", new BigDecimal("5.00")));
+                "Sentinel-2", observation.cloudCoveragePct()));
 
         String laudo = laudoService.gerarLaudo(evento, ndviAfter, totalLossPct, mlConfidence.multiply(new BigDecimal("100")));
 
@@ -113,5 +123,16 @@ public class SatelliteAnalysisService {
         if (v >= 0.4) return SATELLITE_CLASS_ESTRESSE_LEVE;
         if (v >= 0.2) return SATELLITE_CLASS_ESTRESSE_MODERADO;
         return SATELLITE_CLASS_ESTRESSE_SEVERO;
+    }
+
+    private SentinelHubObservation buscarObservacao(SinistroAbertoEvent evento, BigDecimal ndviBefore) {
+        try {
+            return sentinelHubService.buscarNdvi(evento)
+                    .orElseGet(() -> new SentinelHubObservation(calcularNdviPosEvento(ndviBefore), new BigDecimal("5.00")));
+        } catch (SentinelHubIntegrationException ex) {
+            log.warn("Sentinel Hub indisponível para o sinistro {} — usando fallback simulado. Causa: {}",
+                    evento.claimNumber(), ex.getMessage());
+            return new SentinelHubObservation(calcularNdviPosEvento(ndviBefore), new BigDecimal("5.00"));
+        }
     }
 }
