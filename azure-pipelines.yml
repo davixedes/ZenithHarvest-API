@@ -186,7 +186,7 @@ stages:
                       --max-replicas 1 \
                       --env-vars \
                         RABBITMQ_DEFAULT_USER=$(rabbitmqUser) \
-                        RABBITMQ_DEFAULT_PASS="$(RABBITMQ_PASSWORD)"
+                        "RABBITMQ_DEFAULT_PASS=$RABBITMQ_PASSWORD"
                   fi
                 displayName: 'Criar ou atualizar Container App — rabbitmq'
                 env:
@@ -274,13 +274,16 @@ stages:
                 displayName: 'Login Azure'
 
               - script: |
+                  az containerapp registry set \
+                    --name $(acaCoreSvc) \
+                    --resource-group $(resourceGroup) \
+                    --server $(acrLoginServer) \
+                    --username "$(ACR_USERNAME)" \
+                    --password "$(ACR_PASSWORD)"
                   az containerapp update \
                     --name $(acaCoreSvc) \
                     --resource-group $(resourceGroup) \
                     --image $(acrLoginServer)/zenith-core-svc:$(imageTag) \
-                    --registry-server $(acrLoginServer) \
-                    --registry-username "$(ACR_USERNAME)" \
-                    --registry-password "$(ACR_PASSWORD)" \
                     --set-env-vars \
                       SPRING_PROFILES_ACTIVE=prod \
                       DB_URL="jdbc:postgresql://$(PSQL_SERVER):5432/$(psqlDb)?sslmode=require" \
@@ -325,13 +328,16 @@ stages:
                 displayName: 'Login Azure'
 
               - script: |
+                  az containerapp registry set \
+                    --name $(acaAnaliseSvc) \
+                    --resource-group $(resourceGroup) \
+                    --server $(acrLoginServer) \
+                    --username "$(ACR_USERNAME)" \
+                    --password "$(ACR_PASSWORD)"
                   az containerapp update \
                     --name $(acaAnaliseSvc) \
                     --resource-group $(resourceGroup) \
                     --image $(acrLoginServer)/zenith-analise-svc:$(imageTag) \
-                    --registry-server $(acrLoginServer) \
-                    --registry-username "$(ACR_USERNAME)" \
-                    --registry-password "$(ACR_PASSWORD)" \
                     --set-env-vars \
                       SPRING_PROFILES_ACTIVE=prod \
                       POSTGRES_HOST="$(PSQL_SERVER)" \
@@ -385,13 +391,16 @@ stages:
                 displayName: 'Login Azure'
 
               - script: |
+                  az containerapp registry set \
+                    --name $(acaGateway) \
+                    --resource-group $(resourceGroup) \
+                    --server $(acrLoginServer) \
+                    --username "$(ACR_USERNAME)" \
+                    --password "$(ACR_PASSWORD)"
                   az containerapp update \
                     --name $(acaGateway) \
                     --resource-group $(resourceGroup) \
                     --image $(acrLoginServer)/zenith-gateway:$(imageTag) \
-                    --registry-server $(acrLoginServer) \
-                    --registry-username "$(ACR_USERNAME)" \
-                    --registry-password "$(ACR_PASSWORD)" \
                     --set-env-vars \
                       SPRING_PROFILES_ACTIVE=prod \
                       JWK_SET_URI="http://$(acaCoreSvc)/oauth2/jwks" \
