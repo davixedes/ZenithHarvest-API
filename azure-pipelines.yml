@@ -274,28 +274,51 @@ stages:
                 displayName: 'Login Azure'
 
               - script: |
-                  az containerapp registry set \
-                    --name $(acaCoreSvc) \
-                    --resource-group $(resourceGroup) \
-                    --server $(acrLoginServer) \
-                    --username "$(ACR_USERNAME)" \
-                    --password "$(ACR_PASSWORD)"
-                  az containerapp update \
-                    --name $(acaCoreSvc) \
-                    --resource-group $(resourceGroup) \
-                    --image $(acrLoginServer)/zenith-core-svc:$(imageTag) \
-                    --set-env-vars \
-                      SPRING_PROFILES_ACTIVE=prod \
-                      DB_URL="jdbc:postgresql://$(PSQL_SERVER):5432/$(psqlDb)?sslmode=require" \
-                      DB_USERNAME="$(psqlAdmin)" \
-                      DB_PASSWORD="$(PSQL_ADMIN_PASSWORD)" \
-                      RABBITMQ_HOST="$(acaRabbitMQ)" \
-                      RABBITMQ_PORT=5672 \
-                      RABBITMQ_USERNAME="$(rabbitmqUser)" \
-                      RABBITMQ_PASSWORD="$(RABBITMQ_PASSWORD)" \
-                      ANALISE_SVC_URI="http://$(acaAnaliseSvc)" \
-                      JWT_EXPIRATION_SECONDS=28800
-                displayName: 'Atualizar Container App — core-svc'
+                  ENV_VARS="SPRING_PROFILES_ACTIVE=prod \
+                    DB_URL=jdbc:postgresql://$(PSQL_SERVER):5432/$(psqlDb)?sslmode=require \
+                    DB_USERNAME=$(psqlAdmin) \
+                    DB_PASSWORD=$(PSQL_ADMIN_PASSWORD) \
+                    RABBITMQ_HOST=$(acaRabbitMQ) \
+                    RABBITMQ_PORT=5672 \
+                    RABBITMQ_USERNAME=$(rabbitmqUser) \
+                    RABBITMQ_PASSWORD=$RABBITMQ_PASSWORD \
+                    ANALISE_SVC_URI=http://$(acaAnaliseSvc) \
+                    JWT_EXPIRATION_SECONDS=28800"
+
+                  if az containerapp show \
+                      --name $(acaCoreSvc) \
+                      --resource-group $(resourceGroup) \
+                      --only-show-errors &>/dev/null; then
+                    az containerapp ingress update \
+                      --name $(acaCoreSvc) \
+                      --resource-group $(resourceGroup) \
+                      --target-port 8081
+                    az containerapp registry set \
+                      --name $(acaCoreSvc) \
+                      --resource-group $(resourceGroup) \
+                      --server $(acrLoginServer) \
+                      --username "$(ACR_USERNAME)" \
+                      --password "$(ACR_PASSWORD)"
+                    az containerapp update \
+                      --name $(acaCoreSvc) \
+                      --resource-group $(resourceGroup) \
+                      --image $(acrLoginServer)/zenith-core-svc:$(imageTag) \
+                      --set-env-vars $ENV_VARS
+                  else
+                    az containerapp create \
+                      --name $(acaCoreSvc) \
+                      --resource-group $(resourceGroup) \
+                      --environment $(containerAppsEnv) \
+                      --image $(acrLoginServer)/zenith-core-svc:$(imageTag) \
+                      --ingress internal \
+                      --target-port 8081 \
+                      --min-replicas 0 --max-replicas 3 \
+                      --registry-server $(acrLoginServer) \
+                      --registry-username "$(ACR_USERNAME)" \
+                      --registry-password "$(ACR_PASSWORD)" \
+                      --env-vars $ENV_VARS
+                  fi
+                displayName: 'Deploy Container App — core-svc'
                 env:
                   PSQL_ADMIN_PASSWORD: $(PSQL_ADMIN_PASSWORD)
                   RABBITMQ_PASSWORD: $(RABBITMQ_PASSWORD)
@@ -328,35 +351,58 @@ stages:
                 displayName: 'Login Azure'
 
               - script: |
-                  az containerapp registry set \
-                    --name $(acaAnaliseSvc) \
-                    --resource-group $(resourceGroup) \
-                    --server $(acrLoginServer) \
-                    --username "$(ACR_USERNAME)" \
-                    --password "$(ACR_PASSWORD)"
-                  az containerapp update \
-                    --name $(acaAnaliseSvc) \
-                    --resource-group $(resourceGroup) \
-                    --image $(acrLoginServer)/zenith-analise-svc:$(imageTag) \
-                    --set-env-vars \
-                      SPRING_PROFILES_ACTIVE=prod \
-                      POSTGRES_HOST="$(PSQL_SERVER)" \
-                      POSTGRES_USERNAME="$(psqlAdmin)" \
-                      POSTGRES_PASSWORD="$(PSQL_ADMIN_PASSWORD)" \
-                      MONGO_HOST="$(MONGO_HOST)" \
-                      MONGO_USERNAME="$(MONGO_USERNAME)" \
-                      MONGO_PASSWORD="$(MONGO_PASSWORD)" \
-                      RABBITMQ_HOST="$(acaRabbitMQ)" \
-                      RABBITMQ_USERNAME="$(rabbitmqUser)" \
-                      RABBITMQ_PASSWORD="$(RABBITMQ_PASSWORD)" \
-                      OLLAMA_BASE_URL="http://$(acaOllama):11434" \
-                      OLLAMA_MODEL=$(ollamaModel) \
-                      SPRING_AI_OLLAMA_INIT_PULL_MODEL_STRATEGY=when_missing \
-                      JWK_SET_URI="http://$(acaCoreSvc)/oauth2/jwks" \
-                      SENTINEL_HUB_ENABLED="$(SENTINEL_HUB_ENABLED)" \
-                      SENTINEL_HUB_CLIENT_ID="$(SENTINEL_HUB_CLIENT_ID)" \
-                      SENTINEL_HUB_CLIENT_SECRET="$(SENTINEL_HUB_CLIENT_SECRET)"
-                displayName: 'Atualizar Container App — analise-svc'
+                  ENV_VARS="SPRING_PROFILES_ACTIVE=prod \
+                    POSTGRES_HOST=$(PSQL_SERVER) \
+                    POSTGRES_USERNAME=$(psqlAdmin) \
+                    POSTGRES_PASSWORD=$PSQL_ADMIN_PASSWORD \
+                    MONGO_HOST=$(MONGO_HOST) \
+                    MONGO_USERNAME=$(MONGO_USERNAME) \
+                    MONGO_PASSWORD=$MONGO_PASSWORD \
+                    RABBITMQ_HOST=$(acaRabbitMQ) \
+                    RABBITMQ_USERNAME=$(rabbitmqUser) \
+                    RABBITMQ_PASSWORD=$RABBITMQ_PASSWORD \
+                    OLLAMA_BASE_URL=http://$(acaOllama):11434 \
+                    OLLAMA_MODEL=$(ollamaModel) \
+                    SPRING_AI_OLLAMA_INIT_PULL_MODEL_STRATEGY=when_missing \
+                    JWK_SET_URI=http://$(acaCoreSvc)/oauth2/jwks \
+                    SENTINEL_HUB_ENABLED=$(SENTINEL_HUB_ENABLED) \
+                    SENTINEL_HUB_CLIENT_ID=$(SENTINEL_HUB_CLIENT_ID) \
+                    SENTINEL_HUB_CLIENT_SECRET=$SENTINEL_HUB_CLIENT_SECRET"
+
+                  if az containerapp show \
+                      --name $(acaAnaliseSvc) \
+                      --resource-group $(resourceGroup) \
+                      --only-show-errors &>/dev/null; then
+                    az containerapp ingress update \
+                      --name $(acaAnaliseSvc) \
+                      --resource-group $(resourceGroup) \
+                      --target-port 8082
+                    az containerapp registry set \
+                      --name $(acaAnaliseSvc) \
+                      --resource-group $(resourceGroup) \
+                      --server $(acrLoginServer) \
+                      --username "$(ACR_USERNAME)" \
+                      --password "$(ACR_PASSWORD)"
+                    az containerapp update \
+                      --name $(acaAnaliseSvc) \
+                      --resource-group $(resourceGroup) \
+                      --image $(acrLoginServer)/zenith-analise-svc:$(imageTag) \
+                      --set-env-vars $ENV_VARS
+                  else
+                    az containerapp create \
+                      --name $(acaAnaliseSvc) \
+                      --resource-group $(resourceGroup) \
+                      --environment $(containerAppsEnv) \
+                      --image $(acrLoginServer)/zenith-analise-svc:$(imageTag) \
+                      --ingress internal \
+                      --target-port 8082 \
+                      --min-replicas 0 --max-replicas 3 \
+                      --registry-server $(acrLoginServer) \
+                      --registry-username "$(ACR_USERNAME)" \
+                      --registry-password "$(ACR_PASSWORD)" \
+                      --env-vars $ENV_VARS
+                  fi
+                displayName: 'Deploy Container App — analise-svc'
                 env:
                   PSQL_ADMIN_PASSWORD: $(PSQL_ADMIN_PASSWORD)
                   MONGO_PASSWORD: $(MONGO_PASSWORD)
@@ -391,22 +437,45 @@ stages:
                 displayName: 'Login Azure'
 
               - script: |
-                  az containerapp registry set \
-                    --name $(acaGateway) \
-                    --resource-group $(resourceGroup) \
-                    --server $(acrLoginServer) \
-                    --username "$(ACR_USERNAME)" \
-                    --password "$(ACR_PASSWORD)"
-                  az containerapp update \
-                    --name $(acaGateway) \
-                    --resource-group $(resourceGroup) \
-                    --image $(acrLoginServer)/zenith-gateway:$(imageTag) \
-                    --set-env-vars \
-                      SPRING_PROFILES_ACTIVE=prod \
-                      JWK_SET_URI="http://$(acaCoreSvc)/oauth2/jwks" \
-                      CORE_SVC_URI="http://$(acaCoreSvc)" \
-                      ANALISE_SVC_URI="http://$(acaAnaliseSvc)"
-                displayName: 'Atualizar Container App — gateway'
+                  ENV_VARS="SPRING_PROFILES_ACTIVE=prod \
+                    JWK_SET_URI=http://$(acaCoreSvc)/oauth2/jwks \
+                    CORE_SVC_URI=http://$(acaCoreSvc) \
+                    ANALISE_SVC_URI=http://$(acaAnaliseSvc)"
+
+                  if az containerapp show \
+                      --name $(acaGateway) \
+                      --resource-group $(resourceGroup) \
+                      --only-show-errors &>/dev/null; then
+                    az containerapp ingress update \
+                      --name $(acaGateway) \
+                      --resource-group $(resourceGroup) \
+                      --target-port 8080
+                    az containerapp registry set \
+                      --name $(acaGateway) \
+                      --resource-group $(resourceGroup) \
+                      --server $(acrLoginServer) \
+                      --username "$(ACR_USERNAME)" \
+                      --password "$(ACR_PASSWORD)"
+                    az containerapp update \
+                      --name $(acaGateway) \
+                      --resource-group $(resourceGroup) \
+                      --image $(acrLoginServer)/zenith-gateway:$(imageTag) \
+                      --set-env-vars $ENV_VARS
+                  else
+                    az containerapp create \
+                      --name $(acaGateway) \
+                      --resource-group $(resourceGroup) \
+                      --environment $(containerAppsEnv) \
+                      --image $(acrLoginServer)/zenith-gateway:$(imageTag) \
+                      --ingress external \
+                      --target-port 8080 \
+                      --min-replicas 0 --max-replicas 3 \
+                      --registry-server $(acrLoginServer) \
+                      --registry-username "$(ACR_USERNAME)" \
+                      --registry-password "$(ACR_PASSWORD)" \
+                      --env-vars $ENV_VARS
+                  fi
+                displayName: 'Deploy Container App — gateway'
 
               - script: |
                   FQDN=$(az containerapp show \
