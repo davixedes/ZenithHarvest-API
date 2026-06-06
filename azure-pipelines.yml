@@ -163,25 +163,31 @@ stages:
                 displayName: 'Login Azure'
 
               - script: |
-                  # Cria na primeira execucao; atualiza nas seguintes.
-                  az containerapp create \
-                    --name $(acaRabbitMQ) \
-                    --resource-group $(resourceGroup) \
-                    --environment $(containerAppsEnv) \
-                    --image rabbitmq:3.13-management-alpine \
-                    --ingress internal \
-                    --target-port 5672 \
-                    --transport tcp \
-                    --min-replicas 1 \
-                    --max-replicas 1 \
-                    --env-vars \
-                      RABBITMQ_DEFAULT_USER=$(rabbitmqUser) \
-                      RABBITMQ_DEFAULT_PASS="$(RABBITMQ_PASSWORD)" \
-                  2>/dev/null || \
-                  az containerapp update \
-                    --name $(acaRabbitMQ) \
-                    --resource-group $(resourceGroup) \
-                    --image rabbitmq:3.13-management-alpine
+                  if az containerapp show \
+                      --name $(acaRabbitMQ) \
+                      --resource-group $(resourceGroup) \
+                      --only-show-errors &>/dev/null; then
+                    echo "Container App ja existe — atualizando imagem..."
+                    az containerapp update \
+                      --name $(acaRabbitMQ) \
+                      --resource-group $(resourceGroup) \
+                      --image rabbitmq:3.13-management-alpine
+                  else
+                    echo "Criando Container App RabbitMQ..."
+                    az containerapp create \
+                      --name $(acaRabbitMQ) \
+                      --resource-group $(resourceGroup) \
+                      --environment $(containerAppsEnv) \
+                      --image rabbitmq:3.13-management-alpine \
+                      --ingress internal \
+                      --target-port 5672 \
+                      --transport tcp \
+                      --min-replicas 1 \
+                      --max-replicas 1 \
+                      --env-vars \
+                        RABBITMQ_DEFAULT_USER=$(rabbitmqUser) \
+                        RABBITMQ_DEFAULT_PASS="$(RABBITMQ_PASSWORD)"
+                  fi
                 displayName: 'Criar ou atualizar Container App — rabbitmq'
                 env:
                   RABBITMQ_PASSWORD: $(RABBITMQ_PASSWORD)
@@ -213,27 +219,33 @@ stages:
                 displayName: 'Login Azure'
 
               - script: |
-                  # Startup: sobe o servidor e puxa o modelo antes de aceitar trafego.
                   STARTUP="ollama serve & until ollama list >/dev/null 2>&1; do sleep 2; done; ollama pull $(ollamaModel); wait"
 
-                  az containerapp create \
-                    --name $(acaOllama) \
-                    --resource-group $(resourceGroup) \
-                    --environment $(containerAppsEnv) \
-                    --image ollama/ollama:latest \
-                    --ingress internal \
-                    --target-port 11434 \
-                    --transport tcp \
-                    --min-replicas 1 \
-                    --max-replicas 1 \
-                    --cpu 2 --memory 4Gi \
-                    --command "/bin/sh" \
-                    --args "-c" "$STARTUP" \
-                  2>/dev/null || \
-                  az containerapp update \
-                    --name $(acaOllama) \
-                    --resource-group $(resourceGroup) \
-                    --image ollama/ollama:latest
+                  if az containerapp show \
+                      --name $(acaOllama) \
+                      --resource-group $(resourceGroup) \
+                      --only-show-errors &>/dev/null; then
+                    echo "Container App ja existe — atualizando imagem..."
+                    az containerapp update \
+                      --name $(acaOllama) \
+                      --resource-group $(resourceGroup) \
+                      --image ollama/ollama:latest
+                  else
+                    echo "Criando Container App Ollama..."
+                    az containerapp create \
+                      --name $(acaOllama) \
+                      --resource-group $(resourceGroup) \
+                      --environment $(containerAppsEnv) \
+                      --image ollama/ollama:latest \
+                      --ingress internal \
+                      --target-port 11434 \
+                      --transport tcp \
+                      --min-replicas 1 \
+                      --max-replicas 1 \
+                      --cpu 2 --memory 4Gi \
+                      --command "/bin/sh" \
+                      --args "-c" "$STARTUP"
+                  fi
                 displayName: 'Criar ou atualizar Container App — ollama'
 
               - script: az logout
