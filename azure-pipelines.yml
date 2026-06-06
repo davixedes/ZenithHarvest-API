@@ -22,6 +22,7 @@
 #    (OLLAMA_BASE_URL e derivado automaticamente do Container App — nao precisa setar)
 #    SENTINEL_HUB_CLIENT_ID     - (opcional) credencial Sentinel Hub / Copernicus
 #    SENTINEL_HUB_CLIENT_SECRET - (opcional) credencial Sentinel Hub / Copernicus
+#    DD_API_KEY                 - Datadog API key (Account > API Keys)
 
 trigger:
   branches:
@@ -47,6 +48,7 @@ variables:
   psqlDb: 'db-zenithharvest'
   psqlAdmin: 'zenith_admin'
   rabbitmqUser: 'zenith'
+  ddSite: 'datadoghq.com'
 
 pool:
   vmImage: 'ubuntu-latest'
@@ -323,6 +325,39 @@ stages:
                   PSQL_ADMIN_PASSWORD: $(PSQL_ADMIN_PASSWORD)
                   RABBITMQ_PASSWORD: $(RABBITMQ_PASSWORD)
 
+              - script: |
+                  python3 - <<'PYEOF'
+                  import json, subprocess, sys, os
+                  APP = "$(acaCoreSvc)"; RG = "$(resourceGroup)"; SVC = "core-svc"
+                  KEY = os.environ["DD_API_KEY"]
+                  out = subprocess.check_output(["az","containerapp","show","--name",APP,"--resource-group",RG,"-o","json"])
+                  spec = json.loads(out)
+                  containers = spec["properties"]["template"]["containers"]
+                  main = next(c for c in containers if c.get("name") != "datadog-agent")
+                  env = main.setdefault("env", [])
+                  keys = {e["name"] for e in env}
+                  for k, v in {"DD_AGENT_HOST":"localhost","DD_SERVICE":SVC,"DD_ENV":"prod",
+                                "DD_LOGS_INJECTION":"true","DD_RUNTIME_METRICS_ENABLED":"true",
+                                "DD_PROFILING_ENABLED":"true","DD_TRACE_SAMPLE_RATE":"1"}.items():
+                      if k not in keys: env.append({"name":k,"value":v})
+                  containers = [c for c in containers if c.get("name") != "datadog-agent"]
+                  containers.append({"name":"datadog-agent","image":"gcr.io/datadoghq/agent:latest",
+                      "resources":{"cpu":0.5,"memory":"1Gi"},
+                      "env":[{"name":"DD_API_KEY","value":KEY},{"name":"DD_SITE","value":"$(ddSite)"},
+                             {"name":"DD_APM_ENABLED","value":"true"},{"name":"DD_APM_NON_LOCAL_TRAFFIC","value":"true"},
+                             {"name":"DD_LOGS_ENABLED","value":"true"},{"name":"DD_LOG_LEVEL","value":"warn"},
+                             {"name":"DD_CONTAINER_EXCLUDE","value":"name:datadog-agent"},
+                             {"name":"DD_HOSTNAME_TRUST_UTS_NAMESPACE","value":"true"}]})
+                  open("/tmp/dd-spec.json","w").write(json.dumps({"properties":{"template":{"containers":containers}}}))
+                  PYEOF
+                  az containerapp update \
+                    --name $(acaCoreSvc) \
+                    --resource-group $(resourceGroup) \
+                    --yaml /tmp/dd-spec.json
+                displayName: 'Datadog sidecar — core-svc'
+                env:
+                  DD_API_KEY: $(DD_API_KEY)
+
               - script: az logout
                 displayName: 'Logout Azure'
                 condition: always()
@@ -409,6 +444,39 @@ stages:
                   RABBITMQ_PASSWORD: $(RABBITMQ_PASSWORD)
                   SENTINEL_HUB_CLIENT_SECRET: $(SENTINEL_HUB_CLIENT_SECRET)
 
+              - script: |
+                  python3 - <<'PYEOF'
+                  import json, subprocess, sys, os
+                  APP = "$(acaAnaliseSvc)"; RG = "$(resourceGroup)"; SVC = "analise-svc"
+                  KEY = os.environ["DD_API_KEY"]
+                  out = subprocess.check_output(["az","containerapp","show","--name",APP,"--resource-group",RG,"-o","json"])
+                  spec = json.loads(out)
+                  containers = spec["properties"]["template"]["containers"]
+                  main = next(c for c in containers if c.get("name") != "datadog-agent")
+                  env = main.setdefault("env", [])
+                  keys = {e["name"] for e in env}
+                  for k, v in {"DD_AGENT_HOST":"localhost","DD_SERVICE":SVC,"DD_ENV":"prod",
+                                "DD_LOGS_INJECTION":"true","DD_RUNTIME_METRICS_ENABLED":"true",
+                                "DD_PROFILING_ENABLED":"true","DD_TRACE_SAMPLE_RATE":"1"}.items():
+                      if k not in keys: env.append({"name":k,"value":v})
+                  containers = [c for c in containers if c.get("name") != "datadog-agent"]
+                  containers.append({"name":"datadog-agent","image":"gcr.io/datadoghq/agent:latest",
+                      "resources":{"cpu":0.5,"memory":"1Gi"},
+                      "env":[{"name":"DD_API_KEY","value":KEY},{"name":"DD_SITE","value":"$(ddSite)"},
+                             {"name":"DD_APM_ENABLED","value":"true"},{"name":"DD_APM_NON_LOCAL_TRAFFIC","value":"true"},
+                             {"name":"DD_LOGS_ENABLED","value":"true"},{"name":"DD_LOG_LEVEL","value":"warn"},
+                             {"name":"DD_CONTAINER_EXCLUDE","value":"name:datadog-agent"},
+                             {"name":"DD_HOSTNAME_TRUST_UTS_NAMESPACE","value":"true"}]})
+                  open("/tmp/dd-spec.json","w").write(json.dumps({"properties":{"template":{"containers":containers}}}))
+                  PYEOF
+                  az containerapp update \
+                    --name $(acaAnaliseSvc) \
+                    --resource-group $(resourceGroup) \
+                    --yaml /tmp/dd-spec.json
+                displayName: 'Datadog sidecar — analise-svc'
+                env:
+                  DD_API_KEY: $(DD_API_KEY)
+
               - script: az logout
                 displayName: 'Logout Azure'
                 condition: always()
@@ -476,6 +544,39 @@ stages:
                       --env-vars $ENV_VARS
                   fi
                 displayName: 'Deploy Container App — gateway'
+
+              - script: |
+                  python3 - <<'PYEOF'
+                  import json, subprocess, sys, os
+                  APP = "$(acaGateway)"; RG = "$(resourceGroup)"; SVC = "gateway"
+                  KEY = os.environ["DD_API_KEY"]
+                  out = subprocess.check_output(["az","containerapp","show","--name",APP,"--resource-group",RG,"-o","json"])
+                  spec = json.loads(out)
+                  containers = spec["properties"]["template"]["containers"]
+                  main = next(c for c in containers if c.get("name") != "datadog-agent")
+                  env = main.setdefault("env", [])
+                  keys = {e["name"] for e in env}
+                  for k, v in {"DD_AGENT_HOST":"localhost","DD_SERVICE":SVC,"DD_ENV":"prod",
+                                "DD_LOGS_INJECTION":"true","DD_RUNTIME_METRICS_ENABLED":"true",
+                                "DD_PROFILING_ENABLED":"true","DD_TRACE_SAMPLE_RATE":"1"}.items():
+                      if k not in keys: env.append({"name":k,"value":v})
+                  containers = [c for c in containers if c.get("name") != "datadog-agent"]
+                  containers.append({"name":"datadog-agent","image":"gcr.io/datadoghq/agent:latest",
+                      "resources":{"cpu":0.5,"memory":"1Gi"},
+                      "env":[{"name":"DD_API_KEY","value":KEY},{"name":"DD_SITE","value":"$(ddSite)"},
+                             {"name":"DD_APM_ENABLED","value":"true"},{"name":"DD_APM_NON_LOCAL_TRAFFIC","value":"true"},
+                             {"name":"DD_LOGS_ENABLED","value":"true"},{"name":"DD_LOG_LEVEL","value":"warn"},
+                             {"name":"DD_CONTAINER_EXCLUDE","value":"name:datadog-agent"},
+                             {"name":"DD_HOSTNAME_TRUST_UTS_NAMESPACE","value":"true"}]})
+                  open("/tmp/dd-spec.json","w").write(json.dumps({"properties":{"template":{"containers":containers}}}))
+                  PYEOF
+                  az containerapp update \
+                    --name $(acaGateway) \
+                    --resource-group $(resourceGroup) \
+                    --yaml /tmp/dd-spec.json
+                displayName: 'Datadog sidecar — gateway'
+                env:
+                  DD_API_KEY: $(DD_API_KEY)
 
               - script: |
                   FQDN=$(az containerapp show \
