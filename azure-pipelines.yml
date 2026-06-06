@@ -219,8 +219,6 @@ stages:
                 displayName: 'Login Azure'
 
               - script: |
-                  STARTUP="ollama serve & until ollama list >/dev/null 2>&1; do sleep 2; done; ollama pull $(ollamaModel); wait"
-
                   if az containerapp show \
                       --name $(acaOllama) \
                       --resource-group $(resourceGroup) \
@@ -242,9 +240,7 @@ stages:
                       --transport tcp \
                       --min-replicas 1 \
                       --max-replicas 1 \
-                      --cpu 2 --memory 4Gi \
-                      --command "/bin/sh" \
-                      --args "-c" "$STARTUP"
+                      --cpu 2 --memory 4Gi
                   fi
                 displayName: 'Criar ou atualizar Container App — ollama'
 
@@ -343,6 +339,7 @@ stages:
                       RABBITMQ_PASSWORD="$(RABBITMQ_PASSWORD)" \
                       OLLAMA_BASE_URL="http://$(acaOllama):11434" \
                       OLLAMA_MODEL=$(ollamaModel) \
+                      SPRING_AI_OLLAMA_INIT_PULL_MODEL_STRATEGY=when_missing \
                       JWK_SET_URI="http://$(acaCoreSvc)/oauth2/jwks" \
                       SENTINEL_HUB_ENABLED="$(SENTINEL_HUB_ENABLED)" \
                       SENTINEL_HUB_CLIENT_ID="$(SENTINEL_HUB_CLIENT_ID)" \
