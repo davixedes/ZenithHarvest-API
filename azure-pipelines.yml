@@ -1,17 +1,27 @@
 #  ZenithHarvest API — CI/CD Pipeline (Azure DevOps)
 #
-#  CI : checkout → JDK 21 → mvn test (H2 em memoria) → mvn package → docker push ACR
-#  CD : deploy no Azure Container App (somente branch main)
+#  CI : checkout → JDK 21 → mvn test → mvn package → build & push 3 imagens no ACR
+#  CD : deploy dos 5 Container Apps:
+#       rabbitmq ┐
+#       ollama   ├→ core-svc → analise-svc → gateway  (somente branch main)
+#       (paralelos)
 #
-#  Variaveis SECRETAS (Pipelines > Edit > Variables):
-#    ACR_USERNAME          - admin do ACR (acrzenith)
-#    ACR_PASSWORD          - senha do ACR
-#    AZURE_CLIENT_ID       - service principal app ID
-#    AZURE_CLIENT_SECRET   - service principal secret
-#    AZURE_TENANT_ID       - tenant ID
-#    AZURE_SUBSCRIPTION_ID - subscription ID
-#    PSQL_ADMIN_PASSWORD   - senha do PostgreSQL
-#    PSQL_SERVER           - nome do servidor (psql-zenithharvest)
+#  Variaveis SECRETAS (Pipelines > Edit > Variables > marcar "Keep this value secret"):
+#    ACR_USERNAME               - usuario admin do ACR (acrzenith)
+#    ACR_PASSWORD               - senha do ACR
+#    AZURE_CLIENT_ID            - service principal app ID
+#    AZURE_CLIENT_SECRET        - service principal secret
+#    AZURE_TENANT_ID            - tenant ID
+#    AZURE_SUBSCRIPTION_ID      - subscription ID
+#    PSQL_SERVER                - FQDN do PostgreSQL (ex: psql-zenith.postgres.database.azure.com)
+#    PSQL_ADMIN_PASSWORD        - senha do PostgreSQL
+#    RABBITMQ_PASSWORD          - senha do RabbitMQ (usuario fixado em rabbitmqUser abaixo)
+#    MONGO_HOST                 - hostname do MongoDB / Cosmos DB (ex: mongo.internal)
+#    MONGO_USERNAME             - usuario MongoDB
+#    MONGO_PASSWORD             - senha MongoDB
+#    (OLLAMA_BASE_URL e derivado automaticamente do Container App — nao precisa setar)
+#    SENTINEL_HUB_CLIENT_ID     - (opcional) credencial Sentinel Hub / Copernicus
+#    SENTINEL_HUB_CLIENT_SECRET - (opcional) credencial Sentinel Hub / Copernicus
 
 trigger:
   branches:
@@ -25,12 +35,18 @@ pr:
 
 variables:
   acrLoginServer: 'acrzenith.azurecr.io'
-  imageRepository: 'zenithharvest-api'
   imageTag: '$(Build.BuildId)'
   resourceGroup: 'rg-zenithharvest'
-  containerAppName: 'aca-zenithharvest'
+  containerAppsEnv: 'cae-zenithharvest'
+  acaRabbitMQ: 'aca-zenith-rabbitmq'
+  acaOllama: 'aca-zenith-ollama'
+  ollamaModel: 'qwen2:0.5b'
+  acaGateway: 'aca-zenith-gateway'
+  acaCoreSvc: 'aca-zenith-core-svc'
+  acaAnaliseSvc: 'aca-zenith-analise-svc'
   psqlDb: 'db-zenithharvest'
   psqlAdmin: 'zenith_admin'
+  rabbitmqUser: 'zenith'
 
 pool:
   vmImage: 'ubuntu-latest'
@@ -42,7 +58,7 @@ stages:
   displayName: 'CI — Build, Test & Push'
   jobs:
     - job: BuildTestPush
-      displayName: 'Maven build + Docker push'
+      displayName: 'Maven build + Docker push (3 imagens)'
       steps:
 
         - checkout: self
@@ -93,24 +109,40 @@ stages:
             ACR_PASSWORD: $(ACR_PASSWORD)
 
         - script: |
-            docker buildx build \
-              --platform linux/amd64 \
-              -t $(acrLoginServer)/$(imageRepository):$(imageTag) \
-              -t $(acrLoginServer)/$(imageRepository):latest \
-              -f Dockerfile \
-              --push \
-              .
-          displayName: 'Build & push imagem Docker'
+            docker buildx build --platform linux/amd64 \
+              --build-arg MODULE=core-svc \
+              -t $(acrLoginServer)/zenith-core-svc:$(imageTag) \
+              -t $(acrLoginServer)/zenith-core-svc:latest \
+              -f Dockerfile --push .
+          displayName: 'Build & push — core-svc'
+
+        - script: |
+            docker buildx build --platform linux/amd64 \
+              --build-arg MODULE=analise-svc \
+              -t $(acrLoginServer)/zenith-analise-svc:$(imageTag) \
+              -t $(acrLoginServer)/zenith-analise-svc:latest \
+              -f Dockerfile --push .
+          displayName: 'Build & push — analise-svc'
+
+        - script: |
+            docker buildx build --platform linux/amd64 \
+              --build-arg MODULE=gateway \
+              -t $(acrLoginServer)/zenith-gateway:$(imageTag) \
+              -t $(acrLoginServer)/zenith-gateway:latest \
+              -f Dockerfile --push .
+          displayName: 'Build & push — gateway'
 
 # ─── STAGE 2 — CD ─────────────────────────────────────────────────────────────
 - stage: CD
-  displayName: 'CD — Deploy Container App'
+  displayName: 'CD — Deploy Container Apps'
   dependsOn: CI
   condition: |
     and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
   jobs:
-    - deployment: Deploy
-      displayName: 'Deploy aca-zenithharvest'
+
+    # ── 0. rabbitmq (infra de mensageria — sobe antes dos servicos) ───────────
+    - deployment: DeployRabbitMQ
+      displayName: 'Deploy RabbitMQ'
       environment: 'production'
       strategy:
         runOnce:
@@ -128,40 +160,234 @@ stages:
                     -p "$(AZURE_CLIENT_SECRET)" \
                     --tenant "$(AZURE_TENANT_ID)"
                   az account set --subscription "$(AZURE_SUBSCRIPTION_ID)"
-                displayName: 'Login Azure (service principal)'
+                displayName: 'Login Azure'
 
               - script: |
-                  az containerapp registry set \
-                    --name $(containerAppName) \
+                  # Cria na primeira execucao; atualiza nas seguintes.
+                  az containerapp create \
+                    --name $(acaRabbitMQ) \
                     --resource-group $(resourceGroup) \
-                    --server $(acrLoginServer) \
-                    --username "$(ACR_USERNAME)" \
-                    --password "$(ACR_PASSWORD)"
-                displayName: 'Configurar credenciais do ACR'
+                    --environment $(containerAppsEnv) \
+                    --image rabbitmq:3.13-management-alpine \
+                    --ingress internal \
+                    --target-port 5672 \
+                    --transport tcp \
+                    --min-replicas 1 \
+                    --max-replicas 1 \
+                    --env-vars \
+                      RABBITMQ_DEFAULT_USER=$(rabbitmqUser) \
+                      RABBITMQ_DEFAULT_PASS="$(RABBITMQ_PASSWORD)" \
+                  2>/dev/null || \
+                  az containerapp update \
+                    --name $(acaRabbitMQ) \
+                    --resource-group $(resourceGroup) \
+                    --image rabbitmq:3.13-management-alpine
+                displayName: 'Criar ou atualizar Container App — rabbitmq'
                 env:
-                  ACR_USERNAME: $(ACR_USERNAME)
-                  ACR_PASSWORD: $(ACR_PASSWORD)
+                  RABBITMQ_PASSWORD: $(RABBITMQ_PASSWORD)
+
+              - script: az logout
+                displayName: 'Logout Azure'
+                condition: always()
+
+    # ── 0b. ollama (paralelo com rabbitmq — LLM local para o analise-svc) ────
+    - deployment: DeployOllama
+      displayName: 'Deploy Ollama'
+      environment: 'production'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+
+              - script: |
+                  curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+                  az extension add --name containerapp --upgrade --only-show-errors
+                displayName: 'Instalar Azure CLI + containerapp'
+
+              - script: |
+                  az login --service-principal \
+                    -u "$(AZURE_CLIENT_ID)" \
+                    -p "$(AZURE_CLIENT_SECRET)" \
+                    --tenant "$(AZURE_TENANT_ID)"
+                  az account set --subscription "$(AZURE_SUBSCRIPTION_ID)"
+                displayName: 'Login Azure'
+
+              - script: |
+                  # Startup: sobe o servidor e puxa o modelo antes de aceitar trafego.
+                  STARTUP="ollama serve & until ollama list >/dev/null 2>&1; do sleep 2; done; ollama pull $(ollamaModel); wait"
+
+                  az containerapp create \
+                    --name $(acaOllama) \
+                    --resource-group $(resourceGroup) \
+                    --environment $(containerAppsEnv) \
+                    --image ollama/ollama:latest \
+                    --ingress internal \
+                    --target-port 11434 \
+                    --transport tcp \
+                    --min-replicas 1 \
+                    --max-replicas 1 \
+                    --cpu 2 --memory 4Gi \
+                    --command "/bin/sh" \
+                    --args "-c" "$STARTUP" \
+                  2>/dev/null || \
+                  az containerapp update \
+                    --name $(acaOllama) \
+                    --resource-group $(resourceGroup) \
+                    --image ollama/ollama:latest
+                displayName: 'Criar ou atualizar Container App — ollama'
+
+              - script: az logout
+                displayName: 'Logout Azure'
+                condition: always()
+
+    # ── 1. core-svc (gera o JWK endpoint que os outros dependem) ─────────────
+    - deployment: DeployCoreSvc
+      displayName: 'Deploy core-svc'
+      environment: 'production'
+      dependsOn:
+        - DeployRabbitMQ
+        - DeployOllama
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+
+              - script: |
+                  curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+                  az extension add --name containerapp --upgrade --only-show-errors
+                displayName: 'Instalar Azure CLI + containerapp'
+
+              - script: |
+                  az login --service-principal \
+                    -u "$(AZURE_CLIENT_ID)" \
+                    -p "$(AZURE_CLIENT_SECRET)" \
+                    --tenant "$(AZURE_TENANT_ID)"
+                  az account set --subscription "$(AZURE_SUBSCRIPTION_ID)"
+                displayName: 'Login Azure'
 
               - script: |
                   az containerapp update \
-                    --name $(containerAppName) \
+                    --name $(acaCoreSvc) \
                     --resource-group $(resourceGroup) \
-                    --image $(acrLoginServer)/$(imageRepository):$(imageTag) \
+                    --image $(acrLoginServer)/zenith-core-svc:$(imageTag) \
                     --set-env-vars \
                       SPRING_PROFILES_ACTIVE=prod \
-                      SPRING_DATASOURCE_URL="jdbc:postgresql://$(PSQL_SERVER).postgres.database.azure.com:5432/$(psqlDb)?sslmode=require" \
-                      SPRING_DATASOURCE_USERNAME="$(psqlAdmin)" \
-                      SPRING_DATASOURCE_PASSWORD="$(PSQL_ADMIN_PASSWORD)" \
-                      SPRING_JPA_HIBERNATE_DDL_AUTO=update
-                displayName: 'Atualizar Container App'
+                      DB_URL="jdbc:postgresql://$(PSQL_SERVER):5432/$(psqlDb)?sslmode=require" \
+                      DB_USERNAME="$(psqlAdmin)" \
+                      DB_PASSWORD="$(PSQL_ADMIN_PASSWORD)" \
+                      RABBITMQ_HOST="$(acaRabbitMQ)" \
+                      RABBITMQ_PORT=5672 \
+                      RABBITMQ_USERNAME="$(rabbitmqUser)" \
+                      RABBITMQ_PASSWORD="$(RABBITMQ_PASSWORD)" \
+                      ANALISE_SVC_URI="http://$(acaAnaliseSvc)" \
+                      JWT_EXPIRATION_SECONDS=28800
+                displayName: 'Atualizar Container App — core-svc'
+                env:
+                  PSQL_ADMIN_PASSWORD: $(PSQL_ADMIN_PASSWORD)
+                  RABBITMQ_PASSWORD: $(RABBITMQ_PASSWORD)
+
+              - script: az logout
+                displayName: 'Logout Azure'
+                condition: always()
+
+    # ── 2. analise-svc (depende do core-svc para JWT e do rabbitmq para fila) ─
+    - deployment: DeployAnaliseSvc
+      displayName: 'Deploy analise-svc'
+      environment: 'production'
+      dependsOn: DeployCoreSvc
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+
+              - script: |
+                  curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+                  az extension add --name containerapp --upgrade --only-show-errors
+                displayName: 'Instalar Azure CLI + containerapp'
+
+              - script: |
+                  az login --service-principal \
+                    -u "$(AZURE_CLIENT_ID)" \
+                    -p "$(AZURE_CLIENT_SECRET)" \
+                    --tenant "$(AZURE_TENANT_ID)"
+                  az account set --subscription "$(AZURE_SUBSCRIPTION_ID)"
+                displayName: 'Login Azure'
+
+              - script: |
+                  az containerapp update \
+                    --name $(acaAnaliseSvc) \
+                    --resource-group $(resourceGroup) \
+                    --image $(acrLoginServer)/zenith-analise-svc:$(imageTag) \
+                    --set-env-vars \
+                      SPRING_PROFILES_ACTIVE=prod \
+                      POSTGRES_HOST="$(PSQL_SERVER)" \
+                      POSTGRES_USERNAME="$(psqlAdmin)" \
+                      POSTGRES_PASSWORD="$(PSQL_ADMIN_PASSWORD)" \
+                      MONGO_HOST="$(MONGO_HOST)" \
+                      MONGO_USERNAME="$(MONGO_USERNAME)" \
+                      MONGO_PASSWORD="$(MONGO_PASSWORD)" \
+                      RABBITMQ_HOST="$(acaRabbitMQ)" \
+                      RABBITMQ_USERNAME="$(rabbitmqUser)" \
+                      RABBITMQ_PASSWORD="$(RABBITMQ_PASSWORD)" \
+                      OLLAMA_BASE_URL="http://$(acaOllama):11434" \
+                      OLLAMA_MODEL=$(ollamaModel) \
+                      JWK_SET_URI="http://$(acaCoreSvc)/oauth2/jwks" \
+                      SENTINEL_HUB_ENABLED="$(SENTINEL_HUB_ENABLED)" \
+                      SENTINEL_HUB_CLIENT_ID="$(SENTINEL_HUB_CLIENT_ID)" \
+                      SENTINEL_HUB_CLIENT_SECRET="$(SENTINEL_HUB_CLIENT_SECRET)"
+                displayName: 'Atualizar Container App — analise-svc'
+                env:
+                  PSQL_ADMIN_PASSWORD: $(PSQL_ADMIN_PASSWORD)
+                  MONGO_PASSWORD: $(MONGO_PASSWORD)
+                  RABBITMQ_PASSWORD: $(RABBITMQ_PASSWORD)
+                  SENTINEL_HUB_CLIENT_SECRET: $(SENTINEL_HUB_CLIENT_SECRET)
+
+              - script: az logout
+                displayName: 'Logout Azure'
+                condition: always()
+
+    # ── 3. gateway (ultimo — roteia para os dois servicos anteriores) ──────────
+    - deployment: DeployGateway
+      displayName: 'Deploy gateway'
+      environment: 'production'
+      dependsOn: DeployAnaliseSvc
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+
+              - script: |
+                  curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+                  az extension add --name containerapp --upgrade --only-show-errors
+                displayName: 'Instalar Azure CLI + containerapp'
+
+              - script: |
+                  az login --service-principal \
+                    -u "$(AZURE_CLIENT_ID)" \
+                    -p "$(AZURE_CLIENT_SECRET)" \
+                    --tenant "$(AZURE_TENANT_ID)"
+                  az account set --subscription "$(AZURE_SUBSCRIPTION_ID)"
+                displayName: 'Login Azure'
+
+              - script: |
+                  az containerapp update \
+                    --name $(acaGateway) \
+                    --resource-group $(resourceGroup) \
+                    --image $(acrLoginServer)/zenith-gateway:$(imageTag) \
+                    --set-env-vars \
+                      SPRING_PROFILES_ACTIVE=prod \
+                      JWK_SET_URI="http://$(acaCoreSvc)/oauth2/jwks" \
+                      CORE_SVC_URI="http://$(acaCoreSvc)" \
+                      ANALISE_SVC_URI="http://$(acaAnaliseSvc)"
+                displayName: 'Atualizar Container App — gateway'
 
               - script: |
                   FQDN=$(az containerapp show \
-                    --name $(containerAppName) \
+                    --name $(acaGateway) \
                     --resource-group $(resourceGroup) \
                     --query properties.configuration.ingress.fqdn -o tsv)
-                  echo "API disponivel em: https://$FQDN"
-                  echo "Health:            https://$FQDN/actuator/health"
+                  echo "Gateway disponivel em: https://$FQDN"
+                  echo "Health:                https://$FQDN/actuator/health"
                 displayName: 'Mostrar URL publica'
 
               - script: az logout
