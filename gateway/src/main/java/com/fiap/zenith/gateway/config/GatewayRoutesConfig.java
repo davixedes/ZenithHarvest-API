@@ -24,9 +24,13 @@ public class GatewayRoutesConfig {
     @Bean
     public RouterFunction<ServerResponse> coreRoutes(
             org.springframework.core.env.Environment env) {
-        String coreUri = env.getProperty("zenith.gateway.core-uri", "http://localhost:8081");
+        String coreUri    = env.getProperty("zenith.gateway.core-uri",    "http://localhost:8081");
+        String analiseUri = env.getProperty("zenith.gateway.analise-uri", "http://localhost:8082");
         return route("core-svc")
                 .route(path("/auth/**"), http(URI.create(coreUri)))
+                // analise-svc — rotas específicas antes do catch-all /api/**
+                .route(path("/api/chatbot").or(path("/api/chatbot/**")), http(URI.create(analiseUri)))
+                .route(path("/api/ndvi/**"), http(URI.create(analiseUri)))
                 .route(path("/api/**"), http(URI.create(coreUri)))
                 .route(path("/swagger-ui/**"), http(URI.create(coreUri)))
                 .route(path("/v3/api-docs/**"), http(URI.create(coreUri)))
