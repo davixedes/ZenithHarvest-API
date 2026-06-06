@@ -81,7 +81,7 @@ services:
     container_name: zenith-ollama-pull
     environment:
       OLLAMA_HOST: http://ollama:11434
-      OLLAMA_MODEL: llama3.2
+      OLLAMA_MODEL: qwen2:0.5b
     entrypoint:
       - /bin/sh
       - -c
@@ -90,7 +90,7 @@ services:
         until ollama list >/dev/null 2>&1; do
           sleep 2
         done
-        ollama pull "${OLLAMA_MODEL}"
+        ollama pull "$${OLLAMA_MODEL}"
     depends_on:
       ollama:
         condition: service_healthy
@@ -145,7 +145,7 @@ services:
       RABBITMQ_USERNAME: zenith
       RABBITMQ_PASSWORD: zenith
       OLLAMA_BASE_URL: http://ollama:11434
-      OLLAMA_MODEL: llama3.2
+      OLLAMA_MODEL: qwen2:0.5b
       JWK_SET_URI: http://core-svc:8081/oauth2/jwks
       SENTINEL_HUB_ENABLED: ${SENTINEL_HUB_ENABLED:-false}
       SENTINEL_HUB_CLIENT_ID: ${SENTINEL_HUB_CLIENT_ID:-}

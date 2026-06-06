@@ -40,7 +40,7 @@ public class Address {
     @Column(name = "PostalCode", nullable = false, length = 9)
     private String postalCode;
 
-    @Column(name = "UF", nullable = false, length = 2, columnDefinition = "char(2)")
+    @Column(name = "UF", nullable = false, length = 2)
     private String uf;
 
     @Column(name = "Country", nullable = false, length = 60)

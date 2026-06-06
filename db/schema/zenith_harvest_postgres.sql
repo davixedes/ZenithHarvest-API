@@ -55,7 +55,7 @@ CREATE TABLE "Address" (
   "City"       VARCHAR(100) NOT NULL,
   "Complement" VARCHAR(150),
   "PostalCode" VARCHAR(9)   NOT NULL,
-  "UF"         CHAR(2)      NOT NULL,
+  "UF"         VARCHAR(2)   NOT NULL,
   "Country"    VARCHAR(60)  NOT NULL
 );
 
@@ -162,7 +162,7 @@ CREATE TABLE "Farm" (
   "Latitude"          NUMERIC(10,7) NOT NULL,
   "Longitude"         NUMERIC(10,7) NOT NULL,
   "TotalAreaHectares" NUMERIC(10,2) NOT NULL,
-  "State"             CHAR(2)       NOT NULL,
+  "State"             VARCHAR(2)    NOT NULL,
   "BiomeId"           INTEGER,
   "PropertyType"      VARCHAR(30),
   "PolygonWkt"        TEXT,

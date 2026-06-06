@@ -15,6 +15,9 @@ spring:
     # Schema é gerido pelo script DDL (db/schema). NUNCA usar update — só validar.
     hibernate:
       ddl-auto: validate
+      naming:
+        # Preserva os nomes PascalCase das anotações @Table/@Column sem converter para snake_case.
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
     open-in-view: false
     properties:
       hibernate:
