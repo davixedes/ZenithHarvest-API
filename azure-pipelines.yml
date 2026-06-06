@@ -278,6 +278,9 @@ stages:
                     --name $(acaCoreSvc) \
                     --resource-group $(resourceGroup) \
                     --image $(acrLoginServer)/zenith-core-svc:$(imageTag) \
+                    --registry-server $(acrLoginServer) \
+                    --registry-username "$(ACR_USERNAME)" \
+                    --registry-password "$(ACR_PASSWORD)" \
                     --set-env-vars \
                       SPRING_PROFILES_ACTIVE=prod \
                       DB_URL="jdbc:postgresql://$(PSQL_SERVER):5432/$(psqlDb)?sslmode=require" \
@@ -326,6 +329,9 @@ stages:
                     --name $(acaAnaliseSvc) \
                     --resource-group $(resourceGroup) \
                     --image $(acrLoginServer)/zenith-analise-svc:$(imageTag) \
+                    --registry-server $(acrLoginServer) \
+                    --registry-username "$(ACR_USERNAME)" \
+                    --registry-password "$(ACR_PASSWORD)" \
                     --set-env-vars \
                       SPRING_PROFILES_ACTIVE=prod \
                       POSTGRES_HOST="$(PSQL_SERVER)" \
@@ -383,6 +389,9 @@ stages:
                     --name $(acaGateway) \
                     --resource-group $(resourceGroup) \
                     --image $(acrLoginServer)/zenith-gateway:$(imageTag) \
+                    --registry-server $(acrLoginServer) \
+                    --registry-username "$(ACR_USERNAME)" \
+                    --registry-password "$(ACR_PASSWORD)" \
                     --set-env-vars \
                       SPRING_PROFILES_ACTIVE=prod \
                       JWK_SET_URI="http://$(acaCoreSvc)/oauth2/jwks" \
