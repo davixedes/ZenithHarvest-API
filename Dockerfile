@@ -40,8 +40,15 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Datadog Java APM agent — baixado em build time, sem dependencia de rede em runtime
+RUN mkdir -p /opt/datadog \
+    && curl -fsSL -o /opt/datadog/dd-java-agent.jar https://dtdg.co/latest-java-tracer
+
 COPY --from=build /workspace/${MODULE}/target/${MODULE}-0.0.1-SNAPSHOT.jar app.jar
 
 EXPOSE 8080 8081 8082
 
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+ENTRYPOINT ["java", \
+  "-javaagent:/opt/datadog/dd-java-agent.jar", \
+  "-Ddd.logs.injection=true", \
+  "-jar", "/app/app.jar"]

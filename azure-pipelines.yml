@@ -22,6 +22,7 @@
 #    (OLLAMA_BASE_URL e derivado automaticamente do Container App — nao precisa setar)
 #    SENTINEL_HUB_CLIENT_ID     - (opcional) credencial Sentinel Hub / Copernicus
 #    SENTINEL_HUB_CLIENT_SECRET - (opcional) credencial Sentinel Hub / Copernicus
+#    DD_API_KEY                 - Datadog API key (Account > API Keys)
 
 trigger:
   branches:
@@ -47,6 +48,7 @@ variables:
   psqlDb: 'db-zenithharvest'
   psqlAdmin: 'zenith_admin'
   rabbitmqUser: 'zenith'
+  ddSite: 'datadoghq.com'
 
 pool:
   vmImage: 'ubuntu-latest'
@@ -274,31 +276,89 @@ stages:
                 displayName: 'Login Azure'
 
               - script: |
-                  az containerapp registry set \
-                    --name $(acaCoreSvc) \
-                    --resource-group $(resourceGroup) \
-                    --server $(acrLoginServer) \
-                    --username "$(ACR_USERNAME)" \
-                    --password "$(ACR_PASSWORD)"
-                  az containerapp update \
-                    --name $(acaCoreSvc) \
-                    --resource-group $(resourceGroup) \
-                    --image $(acrLoginServer)/zenith-core-svc:$(imageTag) \
-                    --set-env-vars \
-                      SPRING_PROFILES_ACTIVE=prod \
-                      DB_URL="jdbc:postgresql://$(PSQL_SERVER):5432/$(psqlDb)?sslmode=require" \
-                      DB_USERNAME="$(psqlAdmin)" \
-                      DB_PASSWORD="$(PSQL_ADMIN_PASSWORD)" \
-                      RABBITMQ_HOST="$(acaRabbitMQ)" \
-                      RABBITMQ_PORT=5672 \
-                      RABBITMQ_USERNAME="$(rabbitmqUser)" \
-                      RABBITMQ_PASSWORD="$(RABBITMQ_PASSWORD)" \
-                      ANALISE_SVC_URI="http://$(acaAnaliseSvc)" \
-                      JWT_EXPIRATION_SECONDS=28800
-                displayName: 'Atualizar Container App — core-svc'
+                  ENV_VARS="SPRING_PROFILES_ACTIVE=prod \
+                    DB_URL=jdbc:postgresql://$(PSQL_SERVER):5432/$(psqlDb)?sslmode=require \
+                    DB_USERNAME=$(psqlAdmin) \
+                    DB_PASSWORD=$(PSQL_ADMIN_PASSWORD) \
+                    RABBITMQ_HOST=$(acaRabbitMQ) \
+                    RABBITMQ_PORT=5672 \
+                    RABBITMQ_USERNAME=$(rabbitmqUser) \
+                    RABBITMQ_PASSWORD=$RABBITMQ_PASSWORD \
+                    ANALISE_SVC_URI=http://$(acaAnaliseSvc) \
+                    JWT_EXPIRATION_SECONDS=28800"
+
+                  if az containerapp show \
+                      --name $(acaCoreSvc) \
+                      --resource-group $(resourceGroup) \
+                      --only-show-errors &>/dev/null; then
+                    az containerapp ingress update \
+                      --name $(acaCoreSvc) \
+                      --resource-group $(resourceGroup) \
+                      --target-port 8081
+                    az containerapp registry set \
+                      --name $(acaCoreSvc) \
+                      --resource-group $(resourceGroup) \
+                      --server $(acrLoginServer) \
+                      --username "$(ACR_USERNAME)" \
+                      --password "$(ACR_PASSWORD)"
+                    az containerapp update \
+                      --name $(acaCoreSvc) \
+                      --resource-group $(resourceGroup) \
+                      --container-name $(acaCoreSvc) \
+                      --image $(acrLoginServer)/zenith-core-svc:$(imageTag) \
+                      --set-env-vars $ENV_VARS
+                  else
+                    az containerapp create \
+                      --name $(acaCoreSvc) \
+                      --resource-group $(resourceGroup) \
+                      --environment $(containerAppsEnv) \
+                      --image $(acrLoginServer)/zenith-core-svc:$(imageTag) \
+                      --ingress internal \
+                      --target-port 8081 \
+                      --min-replicas 0 --max-replicas 3 \
+                      --registry-server $(acrLoginServer) \
+                      --registry-username "$(ACR_USERNAME)" \
+                      --registry-password "$(ACR_PASSWORD)" \
+                      --env-vars $ENV_VARS
+                  fi
+                displayName: 'Deploy Container App — core-svc'
                 env:
                   PSQL_ADMIN_PASSWORD: $(PSQL_ADMIN_PASSWORD)
                   RABBITMQ_PASSWORD: $(RABBITMQ_PASSWORD)
+
+              - script: |
+                  python3 - <<'PYEOF'
+                  import json, subprocess, os
+                  APP = "$(acaCoreSvc)"; RG = "$(resourceGroup)"; SVC = "core-svc"
+                  SUB = "$(AZURE_SUBSCRIPTION_ID)"; KEY = os.environ["DD_API_KEY"]
+                  out = subprocess.check_output(["az","containerapp","show","--name",APP,"--resource-group",RG,"-o","json"])
+                  spec = json.loads(out)
+                  containers = spec["properties"]["template"]["containers"]
+                  main = next(c for c in containers if c.get("name") != "datadog-agent")
+                  env = main.setdefault("env", [])
+                  keys = {e["name"] for e in env}
+                  for k, v in {"DD_AGENT_HOST":"localhost","DD_SERVICE":SVC,"DD_ENV":"prod",
+                                "DD_LOGS_INJECTION":"true","DD_RUNTIME_METRICS_ENABLED":"true",
+                                "DD_PROFILING_ENABLED":"true","DD_TRACE_SAMPLE_RATE":"1"}.items():
+                      if k not in keys: env.append({"name":k,"value":v})
+                  containers = [c for c in containers if c.get("name") != "datadog-agent"]
+                  containers.append({"name":"datadog-agent","image":"gcr.io/datadoghq/agent:latest",
+                      "resources":{"cpu":0.5,"memory":"1Gi"},
+                      "env":[{"name":"DD_API_KEY","value":KEY},{"name":"DD_SITE","value":"$(ddSite)"},
+                             {"name":"DD_APM_ENABLED","value":"true"},{"name":"DD_APM_NON_LOCAL_TRAFFIC","value":"true"},
+                             {"name":"DD_LOGS_ENABLED","value":"true"},{"name":"DD_LOG_LEVEL","value":"warn"},
+                             {"name":"DD_CONTAINER_EXCLUDE","value":"name:datadog-agent"},
+                             {"name":"DD_HOSTNAME_TRUST_UTS_NAMESPACE","value":"true"}]})
+                  for c in containers:
+                      for f in ["imageType","ephemeralStorage"]: c.pop(f,None)
+                      if "resources" in c: c["resources"].pop("ephemeralStorage",None)
+                  body = json.dumps({"properties":{"template":{"containers":containers}}})
+                  url = f"https://management.azure.com/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.App/containerApps/{APP}?api-version=2024-03-01"
+                  subprocess.check_call(["az","rest","--method","PATCH","--url",url,"--headers","Content-Type=application/json","--body",body])
+                  PYEOF
+                displayName: 'Datadog sidecar — core-svc'
+                env:
+                  DD_API_KEY: $(DD_API_KEY)
 
               - script: az logout
                 displayName: 'Logout Azure'
@@ -328,40 +388,98 @@ stages:
                 displayName: 'Login Azure'
 
               - script: |
-                  az containerapp registry set \
-                    --name $(acaAnaliseSvc) \
-                    --resource-group $(resourceGroup) \
-                    --server $(acrLoginServer) \
-                    --username "$(ACR_USERNAME)" \
-                    --password "$(ACR_PASSWORD)"
-                  az containerapp update \
-                    --name $(acaAnaliseSvc) \
-                    --resource-group $(resourceGroup) \
-                    --image $(acrLoginServer)/zenith-analise-svc:$(imageTag) \
-                    --set-env-vars \
-                      SPRING_PROFILES_ACTIVE=prod \
-                      POSTGRES_HOST="$(PSQL_SERVER)" \
-                      POSTGRES_USERNAME="$(psqlAdmin)" \
-                      POSTGRES_PASSWORD="$(PSQL_ADMIN_PASSWORD)" \
-                      MONGO_HOST="$(MONGO_HOST)" \
-                      MONGO_USERNAME="$(MONGO_USERNAME)" \
-                      MONGO_PASSWORD="$(MONGO_PASSWORD)" \
-                      RABBITMQ_HOST="$(acaRabbitMQ)" \
-                      RABBITMQ_USERNAME="$(rabbitmqUser)" \
-                      RABBITMQ_PASSWORD="$(RABBITMQ_PASSWORD)" \
-                      OLLAMA_BASE_URL="http://$(acaOllama):11434" \
-                      OLLAMA_MODEL=$(ollamaModel) \
-                      SPRING_AI_OLLAMA_INIT_PULL_MODEL_STRATEGY=when_missing \
-                      JWK_SET_URI="http://$(acaCoreSvc)/oauth2/jwks" \
-                      SENTINEL_HUB_ENABLED="$(SENTINEL_HUB_ENABLED)" \
-                      SENTINEL_HUB_CLIENT_ID="$(SENTINEL_HUB_CLIENT_ID)" \
-                      SENTINEL_HUB_CLIENT_SECRET="$(SENTINEL_HUB_CLIENT_SECRET)"
-                displayName: 'Atualizar Container App — analise-svc'
+                  ENV_VARS="SPRING_PROFILES_ACTIVE=prod \
+                    POSTGRES_HOST=$(PSQL_SERVER) \
+                    POSTGRES_USERNAME=$(psqlAdmin) \
+                    POSTGRES_PASSWORD=$PSQL_ADMIN_PASSWORD \
+                    MONGO_HOST=$(MONGO_HOST) \
+                    MONGO_USERNAME=$(MONGO_USERNAME) \
+                    MONGO_PASSWORD=$MONGO_PASSWORD \
+                    RABBITMQ_HOST=$(acaRabbitMQ) \
+                    RABBITMQ_USERNAME=$(rabbitmqUser) \
+                    RABBITMQ_PASSWORD=$RABBITMQ_PASSWORD \
+                    OLLAMA_BASE_URL=http://$(acaOllama):11434 \
+                    OLLAMA_MODEL=$(ollamaModel) \
+                    SPRING_AI_OLLAMA_INIT_PULL_MODEL_STRATEGY=when_missing \
+                    JWK_SET_URI=http://$(acaCoreSvc)/oauth2/jwks \
+                    SENTINEL_HUB_ENABLED=$(SENTINEL_HUB_ENABLED) \
+                    SENTINEL_HUB_CLIENT_ID=$(SENTINEL_HUB_CLIENT_ID) \
+                    SENTINEL_HUB_CLIENT_SECRET=$SENTINEL_HUB_CLIENT_SECRET"
+
+                  if az containerapp show \
+                      --name $(acaAnaliseSvc) \
+                      --resource-group $(resourceGroup) \
+                      --only-show-errors &>/dev/null; then
+                    az containerapp ingress update \
+                      --name $(acaAnaliseSvc) \
+                      --resource-group $(resourceGroup) \
+                      --target-port 8082
+                    az containerapp registry set \
+                      --name $(acaAnaliseSvc) \
+                      --resource-group $(resourceGroup) \
+                      --server $(acrLoginServer) \
+                      --username "$(ACR_USERNAME)" \
+                      --password "$(ACR_PASSWORD)"
+                    az containerapp update \
+                      --name $(acaAnaliseSvc) \
+                      --resource-group $(resourceGroup) \
+                      --container-name $(acaAnaliseSvc) \
+                      --image $(acrLoginServer)/zenith-analise-svc:$(imageTag) \
+                      --set-env-vars $ENV_VARS
+                  else
+                    az containerapp create \
+                      --name $(acaAnaliseSvc) \
+                      --resource-group $(resourceGroup) \
+                      --environment $(containerAppsEnv) \
+                      --image $(acrLoginServer)/zenith-analise-svc:$(imageTag) \
+                      --ingress internal \
+                      --target-port 8082 \
+                      --min-replicas 0 --max-replicas 3 \
+                      --registry-server $(acrLoginServer) \
+                      --registry-username "$(ACR_USERNAME)" \
+                      --registry-password "$(ACR_PASSWORD)" \
+                      --env-vars $ENV_VARS
+                  fi
+                displayName: 'Deploy Container App — analise-svc'
                 env:
                   PSQL_ADMIN_PASSWORD: $(PSQL_ADMIN_PASSWORD)
                   MONGO_PASSWORD: $(MONGO_PASSWORD)
                   RABBITMQ_PASSWORD: $(RABBITMQ_PASSWORD)
                   SENTINEL_HUB_CLIENT_SECRET: $(SENTINEL_HUB_CLIENT_SECRET)
+
+              - script: |
+                  python3 - <<'PYEOF'
+                  import json, subprocess, os
+                  APP = "$(acaAnaliseSvc)"; RG = "$(resourceGroup)"; SVC = "analise-svc"
+                  SUB = "$(AZURE_SUBSCRIPTION_ID)"; KEY = os.environ["DD_API_KEY"]
+                  out = subprocess.check_output(["az","containerapp","show","--name",APP,"--resource-group",RG,"-o","json"])
+                  spec = json.loads(out)
+                  containers = spec["properties"]["template"]["containers"]
+                  main = next(c for c in containers if c.get("name") != "datadog-agent")
+                  env = main.setdefault("env", [])
+                  keys = {e["name"] for e in env}
+                  for k, v in {"DD_AGENT_HOST":"localhost","DD_SERVICE":SVC,"DD_ENV":"prod",
+                                "DD_LOGS_INJECTION":"true","DD_RUNTIME_METRICS_ENABLED":"true",
+                                "DD_PROFILING_ENABLED":"true","DD_TRACE_SAMPLE_RATE":"1"}.items():
+                      if k not in keys: env.append({"name":k,"value":v})
+                  containers = [c for c in containers if c.get("name") != "datadog-agent"]
+                  containers.append({"name":"datadog-agent","image":"gcr.io/datadoghq/agent:latest",
+                      "resources":{"cpu":0.5,"memory":"1Gi"},
+                      "env":[{"name":"DD_API_KEY","value":KEY},{"name":"DD_SITE","value":"$(ddSite)"},
+                             {"name":"DD_APM_ENABLED","value":"true"},{"name":"DD_APM_NON_LOCAL_TRAFFIC","value":"true"},
+                             {"name":"DD_LOGS_ENABLED","value":"true"},{"name":"DD_LOG_LEVEL","value":"warn"},
+                             {"name":"DD_CONTAINER_EXCLUDE","value":"name:datadog-agent"},
+                             {"name":"DD_HOSTNAME_TRUST_UTS_NAMESPACE","value":"true"}]})
+                  for c in containers:
+                      for f in ["imageType","ephemeralStorage"]: c.pop(f,None)
+                      if "resources" in c: c["resources"].pop("ephemeralStorage",None)
+                  body = json.dumps({"properties":{"template":{"containers":containers}}})
+                  url = f"https://management.azure.com/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.App/containerApps/{APP}?api-version=2024-03-01"
+                  subprocess.check_call(["az","rest","--method","PATCH","--url",url,"--headers","Content-Type=application/json","--body",body])
+                  PYEOF
+                displayName: 'Datadog sidecar — analise-svc'
+                env:
+                  DD_API_KEY: $(DD_API_KEY)
 
               - script: az logout
                 displayName: 'Logout Azure'
@@ -391,22 +509,80 @@ stages:
                 displayName: 'Login Azure'
 
               - script: |
-                  az containerapp registry set \
-                    --name $(acaGateway) \
-                    --resource-group $(resourceGroup) \
-                    --server $(acrLoginServer) \
-                    --username "$(ACR_USERNAME)" \
-                    --password "$(ACR_PASSWORD)"
-                  az containerapp update \
-                    --name $(acaGateway) \
-                    --resource-group $(resourceGroup) \
-                    --image $(acrLoginServer)/zenith-gateway:$(imageTag) \
-                    --set-env-vars \
-                      SPRING_PROFILES_ACTIVE=prod \
-                      JWK_SET_URI="http://$(acaCoreSvc)/oauth2/jwks" \
-                      CORE_SVC_URI="http://$(acaCoreSvc)" \
-                      ANALISE_SVC_URI="http://$(acaAnaliseSvc)"
-                displayName: 'Atualizar Container App — gateway'
+                  ENV_VARS="SPRING_PROFILES_ACTIVE=prod \
+                    JWK_SET_URI=http://$(acaCoreSvc)/oauth2/jwks \
+                    CORE_SVC_URI=http://$(acaCoreSvc) \
+                    ANALISE_SVC_URI=http://$(acaAnaliseSvc)"
+
+                  if az containerapp show \
+                      --name $(acaGateway) \
+                      --resource-group $(resourceGroup) \
+                      --only-show-errors &>/dev/null; then
+                    az containerapp ingress update \
+                      --name $(acaGateway) \
+                      --resource-group $(resourceGroup) \
+                      --target-port 8080
+                    az containerapp registry set \
+                      --name $(acaGateway) \
+                      --resource-group $(resourceGroup) \
+                      --server $(acrLoginServer) \
+                      --username "$(ACR_USERNAME)" \
+                      --password "$(ACR_PASSWORD)"
+                    az containerapp update \
+                      --name $(acaGateway) \
+                      --resource-group $(resourceGroup) \
+                      --container-name $(acaGateway) \
+                      --image $(acrLoginServer)/zenith-gateway:$(imageTag) \
+                      --set-env-vars $ENV_VARS
+                  else
+                    az containerapp create \
+                      --name $(acaGateway) \
+                      --resource-group $(resourceGroup) \
+                      --environment $(containerAppsEnv) \
+                      --image $(acrLoginServer)/zenith-gateway:$(imageTag) \
+                      --ingress external \
+                      --target-port 8080 \
+                      --min-replicas 0 --max-replicas 3 \
+                      --registry-server $(acrLoginServer) \
+                      --registry-username "$(ACR_USERNAME)" \
+                      --registry-password "$(ACR_PASSWORD)" \
+                      --env-vars $ENV_VARS
+                  fi
+                displayName: 'Deploy Container App — gateway'
+
+              - script: |
+                  python3 - <<'PYEOF'
+                  import json, subprocess, os
+                  APP = "$(acaGateway)"; RG = "$(resourceGroup)"; SVC = "gateway"
+                  SUB = "$(AZURE_SUBSCRIPTION_ID)"; KEY = os.environ["DD_API_KEY"]
+                  out = subprocess.check_output(["az","containerapp","show","--name",APP,"--resource-group",RG,"-o","json"])
+                  spec = json.loads(out)
+                  containers = spec["properties"]["template"]["containers"]
+                  main = next(c for c in containers if c.get("name") != "datadog-agent")
+                  env = main.setdefault("env", [])
+                  keys = {e["name"] for e in env}
+                  for k, v in {"DD_AGENT_HOST":"localhost","DD_SERVICE":SVC,"DD_ENV":"prod",
+                                "DD_LOGS_INJECTION":"true","DD_RUNTIME_METRICS_ENABLED":"true",
+                                "DD_PROFILING_ENABLED":"true","DD_TRACE_SAMPLE_RATE":"1"}.items():
+                      if k not in keys: env.append({"name":k,"value":v})
+                  containers = [c for c in containers if c.get("name") != "datadog-agent"]
+                  containers.append({"name":"datadog-agent","image":"gcr.io/datadoghq/agent:latest",
+                      "resources":{"cpu":0.5,"memory":"1Gi"},
+                      "env":[{"name":"DD_API_KEY","value":KEY},{"name":"DD_SITE","value":"$(ddSite)"},
+                             {"name":"DD_APM_ENABLED","value":"true"},{"name":"DD_APM_NON_LOCAL_TRAFFIC","value":"true"},
+                             {"name":"DD_LOGS_ENABLED","value":"true"},{"name":"DD_LOG_LEVEL","value":"warn"},
+                             {"name":"DD_CONTAINER_EXCLUDE","value":"name:datadog-agent"},
+                             {"name":"DD_HOSTNAME_TRUST_UTS_NAMESPACE","value":"true"}]})
+                  for c in containers:
+                      for f in ["imageType","ephemeralStorage"]: c.pop(f,None)
+                      if "resources" in c: c["resources"].pop("ephemeralStorage",None)
+                  body = json.dumps({"properties":{"template":{"containers":containers}}})
+                  url = f"https://management.azure.com/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.App/containerApps/{APP}?api-version=2024-03-01"
+                  subprocess.check_call(["az","rest","--method","PATCH","--url",url,"--headers","Content-Type=application/json","--body",body])
+                  PYEOF
+                displayName: 'Datadog sidecar — gateway'
+                env:
+                  DD_API_KEY: $(DD_API_KEY)
 
               - script: |
                   FQDN=$(az containerapp show \
