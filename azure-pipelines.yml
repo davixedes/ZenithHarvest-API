@@ -349,6 +349,9 @@ stages:
                              {"name":"DD_LOGS_ENABLED","value":"true"},{"name":"DD_LOG_LEVEL","value":"warn"},
                              {"name":"DD_CONTAINER_EXCLUDE","value":"name:datadog-agent"},
                              {"name":"DD_HOSTNAME_TRUST_UTS_NAMESPACE","value":"true"}]})
+                  for c in containers:
+                      for f in ["imageType","ephemeralStorage"]: c.pop(f,None)
+                      if "resources" in c: c["resources"].pop("ephemeralStorage",None)
                   body = json.dumps({"properties":{"template":{"containers":containers}}})
                   url = f"https://management.azure.com/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.App/containerApps/{APP}?api-version=2024-03-01"
                   subprocess.check_call(["az","rest","--method","PATCH","--url",url,"--headers","Content-Type=application/json","--body",body])
@@ -467,6 +470,9 @@ stages:
                              {"name":"DD_LOGS_ENABLED","value":"true"},{"name":"DD_LOG_LEVEL","value":"warn"},
                              {"name":"DD_CONTAINER_EXCLUDE","value":"name:datadog-agent"},
                              {"name":"DD_HOSTNAME_TRUST_UTS_NAMESPACE","value":"true"}]})
+                  for c in containers:
+                      for f in ["imageType","ephemeralStorage"]: c.pop(f,None)
+                      if "resources" in c: c["resources"].pop("ephemeralStorage",None)
                   body = json.dumps({"properties":{"template":{"containers":containers}}})
                   url = f"https://management.azure.com/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.App/containerApps/{APP}?api-version=2024-03-01"
                   subprocess.check_call(["az","rest","--method","PATCH","--url",url,"--headers","Content-Type=application/json","--body",body])
@@ -567,6 +573,9 @@ stages:
                              {"name":"DD_LOGS_ENABLED","value":"true"},{"name":"DD_LOG_LEVEL","value":"warn"},
                              {"name":"DD_CONTAINER_EXCLUDE","value":"name:datadog-agent"},
                              {"name":"DD_HOSTNAME_TRUST_UTS_NAMESPACE","value":"true"}]})
+                  for c in containers:
+                      for f in ["imageType","ephemeralStorage"]: c.pop(f,None)
+                      if "resources" in c: c["resources"].pop("ephemeralStorage",None)
                   body = json.dumps({"properties":{"template":{"containers":containers}}})
                   url = f"https://management.azure.com/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.App/containerApps/{APP}?api-version=2024-03-01"
                   subprocess.check_call(["az","rest","--method","PATCH","--url",url,"--headers","Content-Type=application/json","--body",body])
