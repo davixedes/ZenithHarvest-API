@@ -327,9 +327,9 @@ stages:
 
               - script: |
                   python3 - <<'PYEOF'
-                  import json, subprocess, sys, os
+                  import json, subprocess, os
                   APP = "$(acaCoreSvc)"; RG = "$(resourceGroup)"; SVC = "core-svc"
-                  KEY = os.environ["DD_API_KEY"]
+                  SUB = "$(AZURE_SUBSCRIPTION_ID)"; KEY = os.environ["DD_API_KEY"]
                   out = subprocess.check_output(["az","containerapp","show","--name",APP,"--resource-group",RG,"-o","json"])
                   spec = json.loads(out)
                   containers = spec["properties"]["template"]["containers"]
@@ -348,12 +348,10 @@ stages:
                              {"name":"DD_LOGS_ENABLED","value":"true"},{"name":"DD_LOG_LEVEL","value":"warn"},
                              {"name":"DD_CONTAINER_EXCLUDE","value":"name:datadog-agent"},
                              {"name":"DD_HOSTNAME_TRUST_UTS_NAMESPACE","value":"true"}]})
-                  open("/tmp/dd-spec.json","w").write(json.dumps({"properties":{"template":{"containers":containers}}}))
+                  body = json.dumps({"properties":{"template":{"containers":containers}}})
+                  url = f"https://management.azure.com/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.App/containerApps/{APP}?api-version=2024-03-01"
+                  subprocess.check_call(["az","rest","--method","PATCH","--url",url,"--headers","Content-Type=application/json","--body",body])
                   PYEOF
-                  az containerapp update \
-                    --name $(acaCoreSvc) \
-                    --resource-group $(resourceGroup) \
-                    --yaml /tmp/dd-spec.json
                 displayName: 'Datadog sidecar — core-svc'
                 env:
                   DD_API_KEY: $(DD_API_KEY)
@@ -446,9 +444,9 @@ stages:
 
               - script: |
                   python3 - <<'PYEOF'
-                  import json, subprocess, sys, os
+                  import json, subprocess, os
                   APP = "$(acaAnaliseSvc)"; RG = "$(resourceGroup)"; SVC = "analise-svc"
-                  KEY = os.environ["DD_API_KEY"]
+                  SUB = "$(AZURE_SUBSCRIPTION_ID)"; KEY = os.environ["DD_API_KEY"]
                   out = subprocess.check_output(["az","containerapp","show","--name",APP,"--resource-group",RG,"-o","json"])
                   spec = json.loads(out)
                   containers = spec["properties"]["template"]["containers"]
@@ -467,12 +465,10 @@ stages:
                              {"name":"DD_LOGS_ENABLED","value":"true"},{"name":"DD_LOG_LEVEL","value":"warn"},
                              {"name":"DD_CONTAINER_EXCLUDE","value":"name:datadog-agent"},
                              {"name":"DD_HOSTNAME_TRUST_UTS_NAMESPACE","value":"true"}]})
-                  open("/tmp/dd-spec.json","w").write(json.dumps({"properties":{"template":{"containers":containers}}}))
+                  body = json.dumps({"properties":{"template":{"containers":containers}}})
+                  url = f"https://management.azure.com/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.App/containerApps/{APP}?api-version=2024-03-01"
+                  subprocess.check_call(["az","rest","--method","PATCH","--url",url,"--headers","Content-Type=application/json","--body",body])
                   PYEOF
-                  az containerapp update \
-                    --name $(acaAnaliseSvc) \
-                    --resource-group $(resourceGroup) \
-                    --yaml /tmp/dd-spec.json
                 displayName: 'Datadog sidecar — analise-svc'
                 env:
                   DD_API_KEY: $(DD_API_KEY)
@@ -547,9 +543,9 @@ stages:
 
               - script: |
                   python3 - <<'PYEOF'
-                  import json, subprocess, sys, os
+                  import json, subprocess, os
                   APP = "$(acaGateway)"; RG = "$(resourceGroup)"; SVC = "gateway"
-                  KEY = os.environ["DD_API_KEY"]
+                  SUB = "$(AZURE_SUBSCRIPTION_ID)"; KEY = os.environ["DD_API_KEY"]
                   out = subprocess.check_output(["az","containerapp","show","--name",APP,"--resource-group",RG,"-o","json"])
                   spec = json.loads(out)
                   containers = spec["properties"]["template"]["containers"]
@@ -568,12 +564,10 @@ stages:
                              {"name":"DD_LOGS_ENABLED","value":"true"},{"name":"DD_LOG_LEVEL","value":"warn"},
                              {"name":"DD_CONTAINER_EXCLUDE","value":"name:datadog-agent"},
                              {"name":"DD_HOSTNAME_TRUST_UTS_NAMESPACE","value":"true"}]})
-                  open("/tmp/dd-spec.json","w").write(json.dumps({"properties":{"template":{"containers":containers}}}))
+                  body = json.dumps({"properties":{"template":{"containers":containers}}})
+                  url = f"https://management.azure.com/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.App/containerApps/{APP}?api-version=2024-03-01"
+                  subprocess.check_call(["az","rest","--method","PATCH","--url",url,"--headers","Content-Type=application/json","--body",body])
                   PYEOF
-                  az containerapp update \
-                    --name $(acaGateway) \
-                    --resource-group $(resourceGroup) \
-                    --yaml /tmp/dd-spec.json
                 displayName: 'Datadog sidecar — gateway'
                 env:
                   DD_API_KEY: $(DD_API_KEY)
