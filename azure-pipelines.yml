@@ -304,6 +304,7 @@ stages:
                     az containerapp update \
                       --name $(acaCoreSvc) \
                       --resource-group $(resourceGroup) \
+                      --container-name $(acaCoreSvc) \
                       --image $(acrLoginServer)/zenith-core-svc:$(imageTag) \
                       --set-env-vars $ENV_VARS
                   else
@@ -419,6 +420,7 @@ stages:
                     az containerapp update \
                       --name $(acaAnaliseSvc) \
                       --resource-group $(resourceGroup) \
+                      --container-name $(acaAnaliseSvc) \
                       --image $(acrLoginServer)/zenith-analise-svc:$(imageTag) \
                       --set-env-vars $ENV_VARS
                   else
@@ -523,6 +525,7 @@ stages:
                     az containerapp update \
                       --name $(acaGateway) \
                       --resource-group $(resourceGroup) \
+                      --container-name $(acaGateway) \
                       --image $(acrLoginServer)/zenith-gateway:$(imageTag) \
                       --set-env-vars $ENV_VARS
                   else
