@@ -36,3 +36,4 @@ application-secret.yml
 # Ollama / modelos locais (analise-svc)
 models/
 *.gguf
+mastering_database
