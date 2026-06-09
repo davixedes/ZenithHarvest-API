@@ -39,6 +39,26 @@ SELECT d, term FROM (VALUES
 ) AS t(d, term)
 WHERE NOT EXISTS (SELECT 1 FROM "PlotSituation");
 
+-- Crop NÃO é lookup (é entidade: PK UUID + Code), mas é CATÁLOGO GLOBAL de
+-- referência agronômica (NDVI esperado, valor/ha, vulnerabilidades) — curado
+-- centralmente e compartilhado por todos. Por isso vem pré-populado no seed.
+-- Id e Code ficam por conta dos defaults (gen_random_uuid / IDENTITY).
+INSERT INTO "Crop" ("Name", "ScientificName", "AverageCycleDays",
+                    "ExpectedNdviMin", "ExpectedNdviMax", "AverageValuePerHectare",
+                    "DroughtVulnerability", "FrostVulnerability")
+SELECT nome, sci, ciclo, ndvimin, ndvimax, valor, seca, geada FROM (VALUES
+  ('Soja',            'Glycine max',            120, 0.650, 0.850,  6500.00, 7.5, 4.0),
+  ('Milho',           'Zea mays',               150, 0.600, 0.880,  5200.00, 8.0, 6.0),
+  ('Algodão',         'Gossypium hirsutum',     180, 0.550, 0.800,  9800.00, 6.5, 3.0),
+  ('Café',            'Coffea arabica',         365, 0.700, 0.900, 18500.00, 5.0, 9.0),
+  ('Trigo',           'Triticum aestivum',      130, 0.550, 0.820,  4100.00, 7.0, 8.5),
+  ('Cana-de-açúcar',  'Saccharum officinarum',  360, 0.650, 0.900,  7200.00, 6.0, 5.0),
+  ('Arroz',           'Oryza sativa',           130, 0.600, 0.880,  5600.00, 9.0, 5.5),
+  ('Feijão',          'Phaseolus vulgaris',      90, 0.550, 0.820,  4800.00, 8.5, 6.5),
+  ('Sorgo',           'Sorghum bicolor',        120, 0.500, 0.780,  3500.00, 4.0, 5.0)
+) AS t(nome, sci, ciclo, ndvimin, ndvimax, valor, seca, geada)
+WHERE NOT EXISTS (SELECT 1 FROM "Crop");
+
 -- Insurance catalog ----------------------------------------------------------
 INSERT INTO "InsurerSituation" ("Description", "AllowsNewPolicies")
 SELECT d, a FROM (VALUES
