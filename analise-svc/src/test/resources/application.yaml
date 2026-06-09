@@ -41,6 +41,8 @@ spring:
           jwk-set-uri: http://localhost:8081/oauth2/jwks
 
 zenith:
+  core-svc:
+    url: http://localhost:8080
   satellite:
     sentinel-hub:
       enabled: false
