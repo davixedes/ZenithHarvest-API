@@ -30,7 +30,8 @@ public class SecurityConfig {
             "/swagger-ui/**",
             "/v3/api-docs/**",
             "/actuator/health",
-            "/api/lookups/**"
+            "/api/lookups/**",
+            "/api/alertas/interno"   // rota interna — chamada pelo analise-svc via Feign, não exposta no gateway
     };
 
     @Bean

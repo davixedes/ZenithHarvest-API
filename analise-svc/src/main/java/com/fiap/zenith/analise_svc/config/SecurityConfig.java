@@ -19,7 +19,8 @@ public class SecurityConfig {
             "/swagger-ui/**",
             "/v3/api-docs/**",
             "/actuator/health",
-            "/api/chatbot"
+            "/api/chatbot",
+            "/api/varredura/**"   // gatilho manual para demo — não exposto no gateway
     };
 
     @Bean

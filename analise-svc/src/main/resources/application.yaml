@@ -59,6 +59,13 @@ management:
         include: health,info
 
 zenith:
+  core-svc:
+    url: ${CORE_SVC_URL:http://localhost:8081}
+
+  alerta:
+    varredura:
+      cron: ${ALERTA_VARREDURA_CRON:0 0 6 * * *}  # padrão: diário às 6h
+
   satellite:
     sentinel-hub:
       enabled: ${SENTINEL_HUB_ENABLED:false}

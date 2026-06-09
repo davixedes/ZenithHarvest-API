@@ -39,4 +39,7 @@ public interface PreventiveAlertRepository extends JpaRepository<PreventiveAlert
             )
             """)
     Optional<PreventiveAlert> findAccessibleById(@Param("id") UUID id);
+
+    boolean existsByPlotIdAndAlertTypeIdAndAlertSituationIdIn(
+            UUID plotId, Integer alertTypeId, java.util.List<Integer> situationIds);
 }
