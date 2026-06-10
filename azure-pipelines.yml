@@ -115,7 +115,7 @@ stages:
               --build-arg MODULE=core-svc \
               -t $(acrLoginServer)/zenith-core-svc:$(imageTag) \
               -t $(acrLoginServer)/zenith-core-svc:latest \
-              -f Dockerfile --push .
+              -f dockerfiles/Dockerfile --push .
           displayName: 'Build & push — core-svc'
 
         - script: |
@@ -123,7 +123,7 @@ stages:
               --build-arg MODULE=analise-svc \
               -t $(acrLoginServer)/zenith-analise-svc:$(imageTag) \
               -t $(acrLoginServer)/zenith-analise-svc:latest \
-              -f Dockerfile --push .
+              -f dockerfiles/Dockerfile --push .
           displayName: 'Build & push — analise-svc'
 
         - script: |
@@ -131,7 +131,7 @@ stages:
               --build-arg MODULE=gateway \
               -t $(acrLoginServer)/zenith-gateway:$(imageTag) \
               -t $(acrLoginServer)/zenith-gateway:latest \
-              -f Dockerfile --push .
+              -f dockerfiles/Dockerfile --push .
           displayName: 'Build & push — gateway'
 
 # ─── STAGE 2 — CD ─────────────────────────────────────────────────────────────
