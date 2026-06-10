@@ -4,7 +4,9 @@ import com.fiap.zenith.core.application.dto.CreatePaymentRequest;
 import com.fiap.zenith.core.application.dto.PaymentResponse;
 import com.fiap.zenith.core.application.mapper.PaymentMapper;
 import com.fiap.zenith.core.domain.entity.Payment;
+import com.fiap.zenith.core.domain.enums.ClaimSituation;
 import com.fiap.zenith.core.domain.enums.PaymentSituation;
+import com.fiap.zenith.core.domain.repository.ClaimRepository;
 import com.fiap.zenith.core.domain.repository.PaymentRepository;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.data.domain.Page;
@@ -19,10 +21,14 @@ import java.util.UUID;
 public class PaymentService {
 
     private final PaymentRepository paymentRepository;
+    private final ClaimRepository claimRepository;
     private final PaymentMapper paymentMapper;
 
-    public PaymentService(PaymentRepository paymentRepository, PaymentMapper paymentMapper) {
+    public PaymentService(PaymentRepository paymentRepository,
+                          ClaimRepository claimRepository,
+                          PaymentMapper paymentMapper) {
         this.paymentRepository = paymentRepository;
+        this.claimRepository = claimRepository;
         this.paymentMapper = paymentMapper;
     }
 
@@ -44,14 +50,32 @@ public class PaymentService {
         return paymentRepository.findAllByDeletedAtIsNull(pageable).map(paymentMapper::toResponse);
     }
 
-    /** Confirma pagamento via PIX: transita para PaymentSituation.CONFIRMADO e registra PSP transaction id. */
+    /**
+     * Confirma pagamento via PIX: transita para PaymentSituation.CONFIRMADO e registra PSP transaction id.
+     * Se o pagamento for de um sinistro (claimId presente), fecha o ciclo movendo o sinistro para
+     * ClaimSituation.PAGO e carimbando paidAt — a indenização caiu na conta do produtor.
+     */
     @Transactional
-    public PaymentResponse confirmar(UUID id, String pspTransactionId) {
+    public PaymentResponse confirmar(UUID id) {
         Payment payment = buscarEntidade(id);
+        OffsetDateTime agora = OffsetDateTime.now();
+        // O id da transação é emitido pelo PSP (provedor PIX) ao liquidar — aqui simulamos
+        // no padrão EndToEndId do PIX ("E" + timestamp + sufixo), não vem do cliente.
+        String pspTransactionId = "E" + System.currentTimeMillis()
+                + UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
         payment.setPaymentSituationId(PaymentSituation.CONFIRMADO);
         payment.setPspTransactionId(pspTransactionId);
-        payment.setConfirmedAt(OffsetDateTime.now());
-        payment.setEditedAt(OffsetDateTime.now());
+        payment.setConfirmedAt(agora);
+        payment.setEditedAt(agora);
+
+        if (payment.getClaimId() != null) {
+            claimRepository.findByIdAndDeletedAtIsNull(payment.getClaimId()).ifPresent(claim -> {
+                claim.setClaimSituationId(ClaimSituation.PAGO);
+                claim.setPaidAt(agora);
+                claim.setEditedAt(agora);
+            });
+        }
+
         return paymentMapper.toResponse(payment);
     }
 

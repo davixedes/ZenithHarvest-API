@@ -30,14 +30,24 @@ public class ClaimAnalysisConsumer {
         });
     }
 
+    // Situações em que a análise ainda pode decidir o estado do sinistro.
+    private static final int SITUACAO_ABERTO = 1;
+    private static final int SITUACAO_EM_ANALISE = 2;
+
     private void atualizarComResultado(Claim claim, ClaimAnalisadoEvent event) {
+        // Dados da análise são sempre gravados (métricas reais do satélite/IA).
         claim.setNdviAfter(event.ndviAfter());
         claim.setTotalLossPct(event.totalLossPct());
         claim.setTotalAffectedAreaHa(event.totalAffectedAreaHa());
         claim.setCalculatedAmount(event.calculatedAmount());
         claim.setMlConfidenceScore(event.mlConfidenceScore());
         claim.setFraudFlag(event.fraudFlag());
-        if (event.newSituationId() != null) {
+
+        // A transição de situação só vale se o sinistro ainda não foi decidido por um humano.
+        // Evita que um evento atrasado reverta um sinistro já aprovado/pago/rejeitado (race condition).
+        boolean aindaPodeDecidir = claim.getClaimSituationId() == SITUACAO_ABERTO
+                || claim.getClaimSituationId() == SITUACAO_EM_ANALISE;
+        if (event.newSituationId() != null && aindaPodeDecidir) {
             claim.setClaimSituationId(event.newSituationId());
         }
         claim.setEditedAt(OffsetDateTime.now());

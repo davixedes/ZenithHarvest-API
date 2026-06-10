@@ -5,8 +5,8 @@ import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.index.Indexed;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /**
@@ -30,7 +30,7 @@ public class HistoricoNdviDocument {
     private BigDecimal meanEvi;
     private String satelliteSource;
     private BigDecimal cloudCoveragePct;
-    private OffsetDateTime createdAt;
+    private Instant createdAt; // Instant (não OffsetDateTime): o MongoDB tem codec nativo; OffsetDateTime não.
 
     protected HistoricoNdviDocument() {}
 
@@ -45,7 +45,7 @@ public class HistoricoNdviDocument {
         doc.meanEvi = meanEvi;
         doc.satelliteSource = satelliteSource;
         doc.cloudCoveragePct = cloudCoveragePct;
-        doc.createdAt = OffsetDateTime.now();
+        doc.createdAt = Instant.now();
         return doc;
     }
 
@@ -57,5 +57,5 @@ public class HistoricoNdviDocument {
     public BigDecimal getMeanEvi() { return meanEvi; }
     public String getSatelliteSource() { return satelliteSource; }
     public BigDecimal getCloudCoveragePct() { return cloudCoveragePct; }
-    public OffsetDateTime getCreatedAt() { return createdAt; }
+    public Instant getCreatedAt() { return createdAt; }
 }

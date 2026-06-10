@@ -91,7 +91,8 @@ public class Insurer {
         i.takeRatePct = takeRatePct != null ? takeRatePct : new BigDecimal("8.00");
         i.active = true;
         i.insurerSituationId = insurerSituationId;
-        i.accreditedAt = accreditedAt;
+        // operacional com DEFAULT no banco: se não vier, usa hoje (evita null no NOT NULL do INSERT)
+        i.accreditedAt = accreditedAt != null ? accreditedAt : LocalDate.now();
         i.createdAt = OffsetDateTime.now();
         return i;
     }

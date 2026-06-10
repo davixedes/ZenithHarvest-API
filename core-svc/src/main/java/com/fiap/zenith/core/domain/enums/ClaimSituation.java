@@ -8,6 +8,7 @@ public final class ClaimSituation {
     public static final int EM_ANALISE = 2;
     public static final int APROVADO = 3;
     public static final int REJEITADO = 4;
+    public static final int PAGO = 5;
 
     private ClaimSituation() {
         // classe utilitária

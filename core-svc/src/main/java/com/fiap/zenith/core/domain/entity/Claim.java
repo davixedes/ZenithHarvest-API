@@ -119,6 +119,7 @@ public class Claim {
         c.openingGpsLat = openingGpsLat;
         c.openingGpsLng = openingGpsLng;
         c.ndviBefore = ndviBefore;
+        c.fraudFlag = false; // operacional: nasce sem flag; a IA decide depois (evita NOT NULL no INSERT)
         c.createdAt = OffsetDateTime.now();
         return c;
     }

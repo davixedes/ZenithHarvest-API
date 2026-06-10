@@ -3,7 +3,6 @@ package com.fiap.zenith.core.application.service;
 import com.fiap.zenith.core.application.dto.CreatePaymentInvoiceRequest;
 import com.fiap.zenith.core.application.dto.PaymentInvoiceResponse;
 import com.fiap.zenith.core.application.dto.UpdatePaymentInvoiceRequest;
-import com.fiap.zenith.core.application.exception.DuplicateResourceException;
 import com.fiap.zenith.core.application.mapper.PaymentInvoiceMapper;
 import com.fiap.zenith.core.domain.entity.PaymentInvoice;
 import com.fiap.zenith.core.domain.repository.InsurerRepository;
@@ -16,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.time.Year;
 import java.util.UUID;
 
 @Service
@@ -41,10 +41,9 @@ public class PaymentInvoiceService {
         userRepository.findByIdAndDeletedAtIsNull(req.userId())
                 .orElseThrow(() -> new EntityNotFoundException("Usuário não encontrado: " + req.userId()));
         validarSeguradora(req.insurerId());
-        if (paymentInvoiceRepository.existsByInvoiceNumber(req.invoiceNumber())) {
-            throw new DuplicateResourceException("Fatura com número '" + req.invoiceNumber() + "' já existe.");
-        }
-        PaymentInvoice invoice = PaymentInvoice.create(req.invoiceNumber(), req.userId(), req.insurerId(),
+        // InvoiceNumber é o número da fatura — gerado pelo servidor (não vem do cliente).
+        String invoiceNumber = "ZH-FAT-" + Year.now() + "-" + System.currentTimeMillis();
+        PaymentInvoice invoice = PaymentInvoice.create(invoiceNumber, req.userId(), req.insurerId(),
                 req.totalAmount(), req.dueDate());
         return paymentInvoiceMapper.toResponse(paymentInvoiceRepository.save(invoice));
     }

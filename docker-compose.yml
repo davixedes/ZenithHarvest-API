@@ -147,6 +147,7 @@ services:
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_MODEL: qwen2:0.5b
       JWK_SET_URI: http://core-svc:8081/oauth2/jwks
+      CORE_SVC_URL: http://core-svc:8081
       SENTINEL_HUB_ENABLED: ${SENTINEL_HUB_ENABLED:-false}
       SENTINEL_HUB_CLIENT_ID: ${SENTINEL_HUB_CLIENT_ID:-}
       SENTINEL_HUB_CLIENT_SECRET: ${SENTINEL_HUB_CLIENT_SECRET:-}

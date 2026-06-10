@@ -157,6 +157,93 @@ SELECT v FROM (VALUES
 ) AS t(v)
 WHERE NOT EXISTS (SELECT 1 FROM "RejectionReason");
 
+
+-- =============================================================================
+-- CENÁRIO DE DEMO (apresentação) — cadeia completa com UUIDs FIXOS
+-- =============================================================================
+-- Diferente dos lookups acima, isto é dado OPERACIONAL pronto para a demo rodar
+-- com apenas LOGIN + abrir sinistro (sem montar User→Farm→Plot→Insurer→
+-- Insurance→Policy na mão). Idempotente: PKs com UUID fixo + ON CONFLICT/NOT
+-- EXISTS, então re-execuções não duplicam.
+--
+--   Login da demo:  joao@email.com  /  senhaSegura123
+--   policyId fixo:  ff6b203e-5ece-41a5-b992-854757f287ed
+--   plotId  fixo:   63abc434-52b8-4c43-bf46-617b511e5aa5
+--
+-- O hash da senha é gerado pelo pgcrypto (crypt + gen_salt 'bf'), formato $2a$,
+-- compatível com o BCryptPasswordEncoder do core-svc.
+-- =============================================================================
+
+-- Endereço do produtor
+INSERT INTO "Address" ("Id", "Street", "Number", "Neighboor", "City", "PostalCode", "UF", "Country")
+VALUES ('164c4789-df97-4ba4-b4a2-5db1305e27b5', 'Rua das Flores', 100, 'Centro',
+        'Ribeirão Preto', '14010-001', 'SP', 'Brasil')
+ON CONFLICT DO NOTHING;
+
+-- Produtor (User)
+INSERT INTO "User" ("Id", "Cpf", "Name", "LastName", "AddressId", "Email", "Phone")
+VALUES ('276edb95-bc64-4775-a4ec-0773efcb0f2c', '123.456.789-00', 'João', 'Silva',
+        '164c4789-df97-4ba4-b4a2-5db1305e27b5', 'joao@email.com', '(11) 98765-4321')
+ON CONFLICT DO NOTHING;
+
+-- Credencial (hash BCrypt via pgcrypto — aceito pelo BCryptPasswordEncoder)
+INSERT INTO "Credential" ("UserId", "Password", "Secret")
+SELECT '276edb95-bc64-4775-a4ec-0773efcb0f2c',
+       crypt('senhaSegura123', gen_salt('bf', 10)),
+       gen_random_uuid()::text
+WHERE NOT EXISTS (SELECT 1 FROM "Credential" WHERE "UserId" = '276edb95-bc64-4775-a4ec-0773efcb0f2c');
+
+-- Seguradora (InsurerSituation 1 = Ativa)
+INSERT INTO "Insurer" ("Id", "CorporateName", "TradeName", "Cnpj", "SusepCode",
+                       "CommercialEmail", "Phone", "AdminFeePct", "TakeRatePct", "InsurerSituationId")
+VALUES ('50124578-a7c1-4d63-9b5a-dc097c3f729c', 'Brasilseg Companhia de Seguros S.A.', 'Brasilseg',
+        '28.196.889/0001-43', '05631', 'comercial@brasilseg.com.br', '(11) 3003-0000', 5.00, 12.50, 1)
+ON CONFLICT DO NOTHING;
+
+-- Produto de seguro (InsuranceSituation 1 = Disponível)
+INSERT INTO "Insurance" ("Id", "InsurerId", "Name", "Description", "DeductiblePct", "GraceDays",
+                         "MaxCoveragePerHectare", "BaseRatePct", "AvailableStates", "InsuranceSituationId")
+VALUES ('131156a3-903b-4e89-8ef2-621fbc97f89c', '50124578-a7c1-4d63-9b5a-dc097c3f729c',
+        'Multirrisco Agrícola Soja', 'Cobertura paramétrica via NDVI (Sentinel-2) para soja',
+        10.00, 15, 6500.00, 4.500, 'SP,MG,GO,MT,PR', 1)
+ON CONFLICT DO NOTHING;
+
+-- Fazenda (Biome 2 = Cerrado)
+INSERT INTO "Farm" ("Id", "UserId", "Name", "CarRegistration", "Nirf", "Latitude", "Longitude",
+                    "TotalAreaHectares", "State", "BiomeId", "PropertyType", "PolygonWkt")
+VALUES ('7f2cc962-aeac-4863-9715-a49eed56f99c', '276edb95-bc64-4775-a4ec-0773efcb0f2c',
+        'Fazenda Sao Joao', 'SP-1234567-8901234567-8901234567-89', '12345678',
+        -21.1767000, -47.8208000, 250.50, 'SP', 2, 'Rural',
+        'POLYGON((-47.82 -21.17, -47.81 -21.17, -47.81 -21.18, -47.82 -21.18, -47.82 -21.17))')
+ON CONFLICT DO NOTHING;
+
+-- Talhão (PlotSituation 2 = Plantado, ProductionSystem 2 = Irrigado, cultura Soja do catálogo)
+INSERT INTO "Plot" ("Id", "FarmId", "CropId", "PlotSituationId", "ProductionSystemId", "Identifier",
+                    "AreaHectares", "PlantingDate", "EstimatedHarvestDate", "CycleDays", "SeedVariety", "PolygonWkt")
+VALUES ('63abc434-52b8-4c43-bf46-617b511e5aa5', '7f2cc962-aeac-4863-9715-a49eed56f99c',
+        (SELECT "Id" FROM "Crop" WHERE "Name" = 'Soja' LIMIT 1), 2, 2, 'Talhao A1',
+        45.00, '2026-01-15', '2026-05-15', 120, 'M7739IPRO',
+        'POLYGON((-47.82 -21.17, -47.81 -21.17, -47.81 -21.18, -47.82 -21.18, -47.82 -21.17))')
+ON CONFLICT DO NOTHING;
+
+-- Apólice VIGENTE (PolicySituation 1 = Vigente, AllowsClaim=true) — policyId da demo
+INSERT INTO "Policy" ("Id", "PolicyNumber", "PlotId", "InsurerId", "InsuranceId", "PolicySituationId",
+                      "InsuredAmount", "TotalPremium", "MonthlyPremium", "DeductiblePct", "MaxCoverage",
+                      "StartDate", "EndDate")
+VALUES ('ff6b203e-5ece-41a5-b992-854757f287ed', 'ZH-APO-2026-000001',
+        '63abc434-52b8-4c43-bf46-617b511e5aa5', '50124578-a7c1-4d63-9b5a-dc097c3f729c',
+        '131156a3-903b-4e89-8ef2-621fbc97f89c', 1, 292500.00, 13162.50, 1096.88, 10.00, 292500.00,
+        '2026-01-15', '2026-12-31')
+ON CONFLICT DO NOTHING;
+
+-- Item da apólice: cobertura de Seca (ClaimEventType 1)
+INSERT INTO "PolicyItem" ("PolicyId", "ClaimEventTypeId", "CoveragePct", "MaxCoverageAmount", "Notes")
+SELECT 'ff6b203e-5ece-41a5-b992-854757f287ed', 1, 100.00, 292500.00, 'Cobertura total para evento de Seca'
+WHERE NOT EXISTS (
+  SELECT 1 FROM "PolicyItem"
+  WHERE "PolicyId" = 'ff6b203e-5ece-41a5-b992-854757f287ed' AND "ClaimEventTypeId" = 1
+);
+
 -- Financial -------------------------------------------------------------------
 INSERT INTO "PaymentType" ("Description", "Direction")
 SELECT d, dir FROM (VALUES

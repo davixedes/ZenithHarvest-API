@@ -2,7 +2,6 @@ package com.fiap.zenith.core.application.service;
 
 import com.fiap.zenith.core.application.dto.CreatePolicyRequest;
 import com.fiap.zenith.core.application.dto.PolicyResponse;
-import com.fiap.zenith.core.application.exception.DuplicateResourceException;
 import com.fiap.zenith.core.application.mapper.PolicyMapper;
 import com.fiap.zenith.core.domain.entity.Policy;
 import com.fiap.zenith.core.domain.enums.PolicySituation;
@@ -14,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.time.Year;
 import java.util.UUID;
 
 @Service
@@ -29,10 +29,9 @@ public class PolicyService {
 
     @Transactional
     public PolicyResponse criar(CreatePolicyRequest req) {
-        if (policyRepository.existsByPolicyNumberAndDeletedAtIsNull(req.policyNumber())) {
-            throw new DuplicateResourceException("Apólice com número '" + req.policyNumber() + "' já existe.");
-        }
-        Policy policy = Policy.create(req.policyNumber(), req.insuranceQuoteId(), req.plotId(),
+        // PolicyNumber é o protocolo da apólice — gerado pelo servidor (não vem do cliente).
+        String policyNumber = "ZH-APO-" + Year.now() + "-" + System.currentTimeMillis();
+        Policy policy = Policy.create(policyNumber, req.insuranceQuoteId(), req.plotId(),
                 req.insurerId(), req.insuranceId(), req.policySituationId(),
                 req.insuredAmount(), req.totalPremium(), req.monthlyPremium(),
                 req.deductiblePct(), req.maxCoverage(), req.startDate(), req.endDate());

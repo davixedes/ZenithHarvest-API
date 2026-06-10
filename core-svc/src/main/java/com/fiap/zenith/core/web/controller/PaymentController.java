@@ -56,10 +56,9 @@ public class PaymentController {
     }
 
     @PostMapping("/{id}/confirm")
-    @Operation(summary = "Confirma pagamento PIX com ID da transação PSP")
-    public EntityModel<PaymentResponse> confirmar(@PathVariable UUID id,
-                                                   @RequestParam String pspTransactionId) {
-        return toModel(paymentService.confirmar(id, pspTransactionId));
+    @Operation(summary = "Confirma pagamento PIX (o pspTransactionId é gerado pelo provedor/PSP)")
+    public EntityModel<PaymentResponse> confirmar(@PathVariable UUID id) {
+        return toModel(paymentService.confirmar(id));
     }
 
     @DeleteMapping("/{id}")

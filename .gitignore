@@ -37,3 +37,6 @@ application-secret.yml
 models/
 *.gguf
 mastering_database
+
+# Material de apresentação (local, não versionar)
+apresentacao/

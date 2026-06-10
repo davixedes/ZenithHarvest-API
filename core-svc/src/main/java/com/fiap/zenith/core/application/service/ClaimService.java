@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.time.Year;
 import java.util.UUID;
 
 @Service
@@ -59,7 +60,11 @@ public class ClaimService {
         Plot plot = plotRepository.findByIdAndDeletedAtIsNull(policy.getPlotId())
                 .orElseThrow(() -> new EntityNotFoundException("Talhão não encontrado: " + policy.getPlotId()));
 
-        Claim claim = Claim.create(req.claimNumber(), req.policyId(), req.claimSituationId(),
+        // ClaimNumber é o protocolo do sinistro — gerado pelo servidor (não vem do cliente),
+        // garantindo formato e unicidade. Padrão: ZH-SIN-{ano}-{epochMillis}.
+        String claimNumber = "ZH-SIN-" + Year.now() + "-" + System.currentTimeMillis();
+
+        Claim claim = Claim.create(claimNumber, req.policyId(), req.claimSituationId(),
                 req.categoryId(), req.subCategoryId(), req.description(), req.photoUrl(),
                 req.openingGpsLat(), req.openingGpsLng(), req.ndviBefore());
         Claim saved = claimRepository.save(claim);

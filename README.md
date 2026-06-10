@@ -253,7 +253,7 @@ Cria uma nova conta de produtor rural.
 **Response `201`:**
 ```json
 {
-  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "id": "276edb95-bc64-4775-a4ec-0773efcb0f2c",
   "code": 1,
   "name": "João",
   "lastName": "Silva",
@@ -347,7 +347,7 @@ Base: `/api/users`
 **`POST /api/farms` — Request:**
 ```json
 {
-  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "userId": "276edb95-bc64-4775-a4ec-0773efcb0f2c",
   "name": "Fazenda São João",
   "carRegistration": "SP-1234567-8901234567-8901234567-89",
   "nirf": "12345678",
@@ -378,8 +378,8 @@ Base: `/api/users`
 **`POST /api/plots` — Request:**
 ```json
 {
-  "farmId": "550e8400-e29b-41d4-a716-446655440001",
-  "cropId": "550e8400-e29b-41d4-a716-446655440002",
+  "farmId": "7f2cc962-aeac-4863-9715-a49eed56f99c",
+  "cropId": "35d41be8-467a-4ebb-afd9-09e08773fdcc",
   "plotSituationId": 2,
   "productionSystemId": 1,
   "identifier": "Talhão A1",
@@ -437,7 +437,7 @@ Base: `/api/users`
 **`POST /api/insurances` — Request:**
 ```json
 {
-  "insurerId": "550e8400-e29b-41d4-a716-446655440003",
+  "insurerId": "50124578-a7c1-4d63-9b5a-dc097c3f729c",
   "name": "Proteção Soja Premium",
   "description": "Cobertura paramétrica para soja no Cerrado",
   "deductiblePct": 10.00,
@@ -464,9 +464,9 @@ Base: `/api/users`
 **`POST /api/quotes` — Request:**
 ```json
 {
-  "userId": "550e8400-e29b-41d4-a716-446655440000",
-  "plotId": "550e8400-e29b-41d4-a716-446655440004",
-  "insuranceId": "550e8400-e29b-41d4-a716-446655440005",
+  "userId": "276edb95-bc64-4775-a4ec-0773efcb0f2c",
+  "plotId": "63abc434-52b8-4c43-bf46-617b511e5aa5",
+  "insuranceId": "131156a3-903b-4e89-8ef2-621fbc97f89c",
   "quoteSituationId": 1,
   "insuredAmount": 292500.00,
   "totalPremium": 2486.25,
@@ -491,14 +491,13 @@ Base: `/api/users`
 | `POST` | `/api/policies/{id}/cancel` | Cancela apólice |
 | `DELETE` | `/api/policies/{id}` | Soft delete |
 
-**`POST /api/policies` — Request:**
+**`POST /api/policies` — Request:** (o `policyNumber`/protocolo é gerado pelo servidor)
 ```json
 {
-  "policyNumber": "ZH-2026-000001",
-  "insuranceQuoteId": "550e8400-e29b-41d4-a716-446655440006",
-  "plotId": "550e8400-e29b-41d4-a716-446655440004",
-  "insurerId": "550e8400-e29b-41d4-a716-446655440003",
-  "insuranceId": "550e8400-e29b-41d4-a716-446655440005",
+  "insuranceQuoteId": "2dcf0d14-bbe1-4b06-a331-fb0b9ac3339c",
+  "plotId": "63abc434-52b8-4c43-bf46-617b511e5aa5",
+  "insurerId": "50124578-a7c1-4d63-9b5a-dc097c3f729c",
+  "insuranceId": "131156a3-903b-4e89-8ef2-621fbc97f89c",
   "policySituationId": 1,
   "insuredAmount": 292500.00,
   "totalPremium": 2486.25,
@@ -527,7 +526,7 @@ Define quais eventos climáticos a apólice cobre e com qual percentual.
 **`POST /api/policy-items` — Request:**
 ```json
 {
-  "policyId": "550e8400-e29b-41d4-a716-446655440007",
+  "policyId": "ff6b203e-5ece-41a5-b992-854757f287ed",
   "claimEventTypeId": 1,
   "coveragePct": 100.00,
   "maxCoverageAmount": 292500.00,
@@ -548,11 +547,10 @@ Define quais eventos climáticos a apólice cobre e com qual percentual.
 | `POST` | `/api/claims/{id}/reject` | Rejeita sinistro |
 | `DELETE` | `/api/claims/{id}` | Soft delete |
 
-**`POST /api/claims` — Request:**
+**`POST /api/claims` — Request:** (o `claimNumber`/protocolo é gerado pelo servidor)
 ```json
 {
-  "claimNumber": "ZH-SIN-2026-000001",
-  "policyId": "550e8400-e29b-41d4-a716-446655440007",
+  "policyId": "ff6b203e-5ece-41a5-b992-854757f287ed",
   "claimSituationId": 1,
   "categoryId": 1,
   "subCategoryId": 1,
@@ -582,7 +580,7 @@ Define quais eventos climáticos a apólice cobre e com qual percentual.
 **`POST /api/claim-items` — Request:**
 ```json
 {
-  "claimId": "550e8400-e29b-41d4-a716-446655440008",
+  "claimId": "44be5168-f7ca-41f5-b55d-1b6dc4ac199e",
   "claimEventTypeId": 1,
   "affectedAreaHa": 32.50,
   "lossPct": 57.00,
@@ -612,7 +610,7 @@ Define quais eventos climáticos a apólice cobre e com qual percentual.
 {
   "paymentTypeId": 1,
   "paymentSituationId": 1,
-  "claimId": "550e8400-e29b-41d4-a716-446655440008",
+  "claimId": "44be5168-f7ca-41f5-b55d-1b6dc4ac199e",
   "amount": 107932.50,
   "pixKey": "123.456.789-00"
 }
@@ -633,12 +631,11 @@ Define quais eventos climáticos a apólice cobre e com qual percentual.
 | `POST` | `/api/payment-invoices/{id}/pay` | Marca fatura como paga |
 | `DELETE` | `/api/payment-invoices/{id}` | Desativa fatura |
 
-**`POST /api/payment-invoices` — Request:**
+**`POST /api/payment-invoices` — Request:** (o `invoiceNumber` é gerado pelo servidor)
 ```json
 {
-  "invoiceNumber": "FAT-2026-000001",
-  "userId": "550e8400-e29b-41d4-a716-446655440000",
-  "insurerId": "550e8400-e29b-41d4-a716-446655440003",
+  "userId": "276edb95-bc64-4775-a4ec-0773efcb0f2c",
+  "insurerId": "50124578-a7c1-4d63-9b5a-dc097c3f729c",
   "totalAmount": 207.19,
   "dueDate": "2026-07-10"
 }
