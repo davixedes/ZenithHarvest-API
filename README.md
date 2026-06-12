@@ -1,3 +1,10 @@
+# Integrantes
+
+- Davi Praxedes Santos Silva - RM 560719
+- Kauê Vinicius Samartino da Silva - RM 559317
+- João dos Santos Cardoso de Jesus - RM 560400
+- Alexis Ronaldo Quirijota Rondo - RM 560384
+
 # Zenith Harvest — API Java
 
 > **Seguro paramétrico agrícola via satélite.** Monitora lavouras por NDVI (Sentinel-2),
